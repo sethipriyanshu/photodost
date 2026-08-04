@@ -110,9 +110,9 @@ Removed the flipbook album product entirely (routes, APIs, public viewer, `lib/a
 - **Deferred (Phase D-style infra):** wildcard subdomain routing + custom event slugs — bigger host-based-routing work, not needed for testing.
 
 ### Phase 4 — Hardening & deploy
-- Rate limiting (Upstash), structured logging/observability, consistent error handling.
+- Structured logging/observability, consistent error handling. (Guest-search rate limiting is already done and DB-backed, so it survives serverless — no Redis needed for it.)
 - Make the **ML service private** (internal-only network).
-- Production config: Backblaze B2 + Cloudflare CDN, Neon Postgres+pgvector, Upstash Redis; secrets management; healthchecks.
+- Production config: Backblaze B2 + Cloudflare CDN, Neon Postgres+pgvector, Railway Redis; secrets management; healthchecks.
 - Biometric-data compliance pass (consent record, retention/auto-purge of embeddings, privacy copy).
 
 ### Phase 5 — Cashfree INR billing (BUILT, SANDBOX-VERIFIED, NOT YET LIVE)
@@ -137,4 +137,4 @@ Phases 0–3 are done and Phase 5's billing code is written and sandbox-verified
 
 Two tracks left:
 1. **Finish proving billing** — run `docs/BILLING.md` behind a `cloudflared` tunnel, authorize a sandbox UPI mandate through the checkout modal, confirm the webhook lands, then close the open items (invoices, retention, proration, dunning).
-2. **Phase 4 — hardening & deploy** — rate limiting (Upstash), structured logging/observability, consistent error handling, ML service internal-only, production config (B2 + Cloudflare / Neon / Upstash + secrets), biometric-compliance pass.
+2. **Phase 4 — hardening & deploy** — structured logging/observability, consistent error handling, ML service auth (done), production config (B2 + Cloudflare / Neon / Railway Redis + secrets), biometric-compliance pass.

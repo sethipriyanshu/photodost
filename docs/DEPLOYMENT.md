@@ -2,15 +2,17 @@
 
 Ordered path from "works on my laptop" to "taking real money". Each step is checkable; later steps assume earlier ones.
 
-**Legend:** 🔴 blocker (nothing works without it) · 🟠 needed before real customers · 🟡 should-do, not blocking
+**Legend:** ✅ done · 🔴 blocker (nothing works without it) · 🟠 needed before real customers · 🟡 should-do, not blocking
+
+**Plan:** deploy first with Cashfree **sandbox** keys so the whole thing is live and walkable on the internet, then switch to production keys (Stage 5) once it's proven.
 
 ---
 
 ## Stage 0 — Repo foundations
 
-### 0.1 🔴 Put this in git
+### 0.1 ✅ Put this in git — DONE
 
-There is no git repository. Vercel deploys from git, and `.github/workflows/ci.yml` has never run.
+Live at https://github.com/sethipriyanshu/photodost.
 
 ```bash
 git init -b main
@@ -27,11 +29,11 @@ git ls-files | grep -E '(^|/)\.env$' && echo "STOP — secrets staged" || echo "
 
 Your Cashfree sandbox keys are in `apps/web/.env` and `.env`. Both are ignored, but verify before pushing.
 
-### 0.2 🔴 Get CI green
+### 0.2 ✅ Get CI green — DONE (all three jobs)
 
 `pnpm format:check`, `typecheck`, `lint` and `build` all pass locally as of now — formatting had been failing on 28 files and was fixed. Push and confirm the Actions run is green before building on top of it.
 
-### 0.3 🟠 Switch from `db:push` to real migrations
+### 0.3 ✅ Switch from `db:push` to real migrations — DONE
 
 There is no `packages/db/drizzle` directory — the schema has only ever been applied with `drizzle-kit push`, which diffs and can **drop columns** without asking. That is acceptable on a laptop and not acceptable against production data.
 
@@ -81,7 +83,7 @@ Expect `plan='pro'`, `subscription_status='active'`, a non-null `current_period_
 
 ## Stage 2 — Provision production infrastructure
 
-### 2.1 🔴 Postgres — Neon
+### 2.1 ✅ Postgres — Neon — DONE (Singapore, PG 17.10, 12 tables, pgvector verified)
 
 Needs the `vector` extension. Create the DB, then:
 
@@ -95,9 +97,13 @@ Apply migrations, then confirm the HNSW index exists — the worker creates it o
 select indexname from pg_indexes where tablename = 'face_embeddings';
 ```
 
-### 2.2 🔴 Redis — Upstash
+### 2.2 🔴 Redis — Railway (not Upstash)
 
-BullMQ needs Redis. Upstash's TLS URL (`rediss://`) works with ioredis. Note BullMQ holds long-lived connections, so use the **non-serverless** Upstash endpoint or a Railway Redis.
+BullMQ polls continuously — ~1–1.5 commands/second per Worker while completely idle, and there are two Workers. Upstash bills per command, so that's ~216k commands/day doing nothing: the free tier lasts about two days and pay-as-you-go lands near $13/month before a single photo is processed. Bull is [effectively incompatible with Upstash](https://github.com/OptimalBits/bull/discussions/2422) for this reason.
+
+Railway Redis is flat-rate, and since the worker runs there too it gets private networking (`redis.railway.internal`) — so Redis is never exposed to the internet. Set the region to Singapore to match Neon.
+
+Whatever you use, **eviction must be off**. A queue whose keys can be evicted loses jobs silently.
 
 ### 2.3 🔴 Object storage — Backblaze B2 + Cloudflare
 
@@ -131,11 +137,11 @@ openssl rand -hex 32     # BETTER_AUTH_SECRET
 
 ## Stage 3 — Things that don't exist yet
 
-### 3.1 🔴 Worker Dockerfile
+### 3.1 ✅ Worker Dockerfile — DONE (image builds, container boots)
 
 Only `apps/ml/Dockerfile` exists. The worker has no deploy artifact. It needs a multi-stage build that installs pnpm workspace deps, builds `@photodost/db` and the worker, and runs `node dist/index.js`. Note it needs `sharp` (native) — use a Debian-based Node 22 image, not Alpine, or install the musl build explicitly.
 
-### 3.2 🔴 Lock down the ML service
+### 3.2 ✅ Lock down the ML service — DONE (bearer token, fails closed in production)
 
 `apps/ml` has **no authentication of any kind** — no token, no allowlist. Deployed publicly, anyone can post images to `/embed` and burn your CPU.
 
