@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from . import face
@@ -21,8 +22,58 @@ settings = get_settings()
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 
+# -----------------------------------------------------------------------------
+# Authentication
+#
+# The embed endpoints are the entire cost centre of this service, so they are
+# gated on a shared secret that the web app and worker send. `/healthz` stays
+# open because platform health probes can't carry credentials.
+#
+# The unset-token case is deliberately asymmetric: a warning locally (so
+# `pnpm infra:up` needs no configuration) and a hard startup failure in
+# production. Booting an unauthenticated inference service onto the internet
+# should not be something a missing env var can do quietly.
+# -----------------------------------------------------------------------------
+def _auth_configured() -> bool:
+    return bool(settings.ml_service_token)
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    expected = settings.ml_service_token
+    if not expected:
+        # Startup already refused this in production; in development, allow.
+        return
+
+    scheme, _, presented = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not presented:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Constant-time compare so a wrong token can't be recovered by timing.
+    if not hmac.compare_digest(presented, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI signature
+    if not _auth_configured():
+        if settings.ml_env == "production":
+            raise RuntimeError(
+                "ML_SERVICE_TOKEN is required when ML_ENV=production. "
+                "Refusing to start an unauthenticated inference service. "
+                "Generate one with: openssl rand -hex 32"
+            )
+        logger.warning(
+            "ML_SERVICE_TOKEN is not set — /embed endpoints are UNAUTHENTICATED. "
+            "Fine locally; never deploy this way."
+        )
+
     logger.info("warming up InsightFace…")
     t0 = time.perf_counter()
     try:
@@ -75,7 +126,7 @@ class EmbedResponse(BaseModel):
     image_bytes: int
 
 
-@app.post("/embed", response_model=EmbedResponse)
+@app.post("/embed", response_model=EmbedResponse, dependencies=[Depends(require_token)])
 async def embed(image: UploadFile = File(...)) -> EmbedResponse:
     raw = await image.read()
     if not raw:
@@ -120,7 +171,7 @@ class PrimaryEmbedResponse(BaseModel):
     took_ms: int
 
 
-@app.post("/embed/primary", response_model=PrimaryEmbedResponse)
+@app.post("/embed/primary", response_model=PrimaryEmbedResponse, dependencies=[Depends(require_token)])
 async def embed_primary(image: UploadFile = File(...)) -> PrimaryEmbedResponse:
     raw = await image.read()
     if not raw:

@@ -109,6 +109,10 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       S3_FORCE_PATH_STYLE: "true"
+      # Local only: no token, so /embed is open on localhost. Deployed, the
+      # service refuses to start this way (ML_ENV=production requires a token).
+      ML_ENV: development
+      ML_SERVICE_TOKEN: "${ML_SERVICE_TOKEN:-}"
     ports:
       - "8000:8000"
     depends_on:

@@ -28,6 +28,9 @@ export async function embedImage(
   const res = await fetch(`${env.ML_SERVICE_URL.replace(/\/$/, "")}/embed`, {
     method: "POST",
     body: form,
+    // Omitted locally, where the ML service runs unauthenticated. Required in
+    // production — the service refuses to start without a token there.
+    headers: env.ML_SERVICE_TOKEN ? { Authorization: `Bearer ${env.ML_SERVICE_TOKEN}` } : undefined,
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

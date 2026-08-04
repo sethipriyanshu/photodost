@@ -28,6 +28,9 @@ export const env = {
   DATABASE_URL: required("DATABASE_URL"),
   REDIS_URL: required("REDIS_URL"),
   ML_SERVICE_URL: process.env.ML_SERVICE_URL ?? "http://localhost:8000",
+  // Shared secret for the ML service. Empty locally (it runs open); required
+  // in production, where the ML service refuses to boot without one.
+  ML_SERVICE_TOKEN: process.env.ML_SERVICE_TOKEN ?? "",
   S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:9000",
   S3_REGION: process.env.S3_REGION ?? "us-east-1",
   S3_BUCKET: process.env.S3_BUCKET ?? "photodost-dev",

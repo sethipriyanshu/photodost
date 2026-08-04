@@ -45,6 +45,9 @@ export const env = {
 
   REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6380",
   ML_SERVICE_URL: process.env.ML_SERVICE_URL ?? "http://localhost:8000",
+  // Shared secret for the ML service. Empty locally (it runs open); required
+  // in production, where the ML service refuses to boot without one.
+  ML_SERVICE_TOKEN: process.env.ML_SERVICE_TOKEN ?? "",
 
   // ---- Billing (Cashfree Subscriptions) ----
   // While false, every workspace runs on a generous Beta plan (usage is still

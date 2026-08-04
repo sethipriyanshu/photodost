@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     ml_host: str = "0.0.0.0"
     ml_port: int = 8000
 
+    # "development" or "production". In production a missing ml_service_token is
+    # a startup error rather than a warning — see `require_token` in main.py.
+    ml_env: str = "development"
+
+    # Shared secret the web app and worker send as `Authorization: Bearer …`.
+    # Inference is expensive and this service has no other protection, so an
+    # unauthenticated public deployment is an open invitation to burn CPU.
+    # Generate with: openssl rand -hex 32
+    ml_service_token: str | None = None
+
     # Filled in starting Phase 4. Kept here so the schema is locked early.
     database_url: str | None = None
     s3_endpoint: str | None = None

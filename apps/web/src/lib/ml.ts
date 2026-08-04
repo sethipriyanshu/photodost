@@ -24,7 +24,13 @@ export async function embedPrimaryFace(image: Blob | File): Promise<MlPrimaryRes
   form.append("image", image, image instanceof File ? image.name : "selfie.jpg");
 
   const url = `${env.ML_SERVICE_URL.replace(/\/$/, "")}/embed/primary`;
-  const res = await fetch(url, { method: "POST", body: form });
+  const res = await fetch(url, {
+    method: "POST",
+    body: form,
+    // Omitted locally, where the ML service runs unauthenticated. Required in
+    // production — the service refuses to start without a token there.
+    headers: env.ML_SERVICE_TOKEN ? { Authorization: `Bearer ${env.ML_SERVICE_TOKEN}` } : undefined,
+  });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(`ML /embed/primary failed: HTTP ${res.status} ${detail.slice(0, 200)}`);
