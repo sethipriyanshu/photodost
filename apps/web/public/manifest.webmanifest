@@ -1,0 +1,11 @@
+{
+  "name": "Photo Dost",
+  "short_name": "Photo Dost",
+  "description": "Find your photos from any event.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5046E5",
+  "orientation": "portrait-primary",
+  "icons": []
+}

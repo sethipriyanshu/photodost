@@ -1,0 +1,123 @@
+name: photodost
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: photodost-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: photodost
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: photodost
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U photodost -d photodost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: photodost-redis
+    restart: unless-stopped
+    # Mapped to 6380 on host to avoid clashing with a Homebrew Redis on 6379.
+    # Inside the container Redis still listens on 6379.
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: photodost-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # Allow the Next.js app at localhost:3030 to PUT directly via presigned
+      # URLs. "*" is fine for local dev; production R2 has its own CORS UI.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Auto-create the dev bucket on first run.
+  minio-bootstrap:
+    image: minio/mc:latest
+    container_name: photodost-minio-bootstrap
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb -p local/photodost-dev || true;
+      mc anonymous set download local/photodost-dev || true;
+      echo 'MinIO bucket photodost-dev ready';
+      "
+    restart: "no"
+
+  # Mailpit replaces MailHog: Apple-Silicon-native multi-arch image, actively
+  # maintained, same SMTP API on 1025, nicer web UI on 8025.
+  # https://github.com/axllent/mailpit
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: photodost-mailpit
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
+  # ML service: face detection + embedding via InsightFace.
+  # First build downloads + bakes the buffalo_l model pack (~290MB), so the
+  # initial `infra:up` takes a few extra minutes. Subsequent builds are cached.
+  ml:
+    build:
+      context: ../../apps/ml
+      dockerfile: Dockerfile
+    container_name: photodost-ml
+    restart: unless-stopped
+    environment:
+      ML_HOST: 0.0.0.0
+      ML_PORT: "8000"
+      DATABASE_URL: postgres://photodost:devpass@postgres:5432/photodost
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: photodost-dev
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_FORCE_PATH_STYLE: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

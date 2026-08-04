@@ -1,0 +1,354 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------------- */
+/* Design tokens                                                              */
+/* PhotoDost accent: indigo #5046E5. Swap one variable below to rebrand.      */
+/* Light + dark are both subtly hue-tinted toward the accent so surfaces      */
+/* feel designed rather than plain grayscale.                                 */
+/* ------------------------------------------------------------------------- */
+
+:root {
+  --background: oklch(0.988 0.003 277);
+  --foreground: oklch(0.16 0.015 277);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.015 277);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.015 277);
+
+  /* Primary = indigo #5046E5 */
+  --primary: oklch(0.52 0.22 277);
+  --primary-foreground: oklch(0.985 0 0);
+
+  --secondary: oklch(0.962 0.008 277);
+  --secondary-foreground: oklch(0.22 0.02 277);
+
+  --muted: oklch(0.962 0.008 277);
+  --muted-foreground: oklch(0.52 0.02 277);
+
+  --accent: oklch(0.955 0.012 277);
+  --accent-foreground: oklch(0.22 0.02 277);
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(0.915 0.008 277);
+  --input: oklch(0.915 0.008 277);
+  --ring: oklch(0.52 0.22 277);
+
+  --radius: 1rem;
+
+  /* Gradient endpoints for hero art / accents */
+  --grad-a: oklch(0.58 0.23 277); /* indigo   */
+  --grad-b: oklch(0.62 0.26 328); /* fuchsia  */
+  --grad-c: oklch(0.72 0.17 200); /* cyan     */
+}
+
+.dark {
+  --background: oklch(0.14 0.018 277);
+  --foreground: oklch(0.97 0.005 277);
+
+  --card: oklch(0.185 0.022 277);
+  --card-foreground: oklch(0.97 0.005 277);
+
+  --popover: oklch(0.185 0.022 277);
+  --popover-foreground: oklch(0.97 0.005 277);
+
+  --primary: oklch(0.65 0.21 277);
+  --primary-foreground: oklch(0.13 0.02 277);
+
+  --secondary: oklch(0.245 0.025 277);
+  --secondary-foreground: oklch(0.97 0.005 277);
+
+  --muted: oklch(0.245 0.025 277);
+  --muted-foreground: oklch(0.71 0.02 277);
+
+  --accent: oklch(0.26 0.03 277);
+  --accent-foreground: oklch(0.97 0.005 277);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(1 0.01 277 / 12%);
+  --input: oklch(1 0.01 277 / 16%);
+  --ring: oklch(0.65 0.21 277);
+
+  --grad-a: oklch(0.62 0.23 277);
+  --grad-b: oklch(0.65 0.25 328);
+  --grad-c: oklch(0.75 0.15 200);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Mobile-first baseline                                                      */
+/* ------------------------------------------------------------------------- */
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  /* 16px base prevents iOS Safari from auto-zooming inputs on focus */
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+  overflow-x: clip;
+}
+
+/* Honor users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Safe-area utility for fixed bottom bars on iPhone */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Visible focus rings (do not disable!) */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Signature visuals                                                          */
+/* ------------------------------------------------------------------------- */
+
+/* Animated aurora backdrop — drop inside any `relative overflow-hidden` box. */
+.aurora {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(70px);
+  opacity: 0.5;
+  background:
+    radial-gradient(38% 42% at 24% 30%, var(--grad-a) 0%, transparent 70%),
+    radial-gradient(34% 38% at 76% 24%, var(--grad-b) 0%, transparent 70%),
+    radial-gradient(42% 46% at 58% 78%, var(--grad-c) 0%, transparent 70%);
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+.dark .aurora {
+  opacity: 0.32;
+}
+
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 3%, 0) rotate(4deg) scale(1.06);
+  }
+  100% {
+    transform: translate3d(-2%, 2%, 0) rotate(-3deg) scale(1.02);
+  }
+}
+
+/* Gradient headline text */
+.text-gradient {
+  background: linear-gradient(100deg, var(--grad-a) 10%, var(--grad-b) 55%, var(--grad-c) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Frosted glass surface */
+.glass {
+  background: color-mix(in oklab, var(--card) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+}
+
+/* Card that lifts on hover (desktop) and presses on tap (mobile) */
+.lift {
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease;
+}
+@media (hover: hover) {
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 12px 32px -12px color-mix(in oklab, var(--primary) 25%, transparent),
+      0 4px 12px -6px rgb(0 0 0 / 0.08);
+    border-color: color-mix(in oklab, var(--primary) 35%, var(--border));
+  }
+}
+.lift:active {
+  transform: scale(0.985);
+}
+
+/* Slow float for decorative elements */
+.float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Staggered entrance — add .reveal to children of a .reveal-group */
+.reveal {
+  animation: reveal-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.reveal-group > * {
+  animation: reveal-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.reveal-group > *:nth-child(1) {
+  animation-delay: 60ms;
+}
+.reveal-group > *:nth-child(2) {
+  animation-delay: 140ms;
+}
+.reveal-group > *:nth-child(3) {
+  animation-delay: 220ms;
+}
+.reveal-group > *:nth-child(4) {
+  animation-delay: 300ms;
+}
+.reveal-group > *:nth-child(5) {
+  animation-delay: 380ms;
+}
+.reveal-group > *:nth-child(6) {
+  animation-delay: 460ms;
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Shimmer skeleton for loading thumbs */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 6%, transparent),
+    transparent
+  );
+  animation: shimmer-sweep 1.6s infinite;
+}
+@keyframes shimmer-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Subtle dotted grid backdrop for section texture */
+.dots {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--foreground) 9%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 65% 60% at 50% 40%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 65% 60% at 50% 40%, black 30%, transparent 75%);
+}
+
+/* Animated conic ring for the selfie capture frame */
+.scan-ring {
+  background: conic-gradient(
+    from var(--scan-angle, 0deg),
+    var(--grad-a),
+    var(--grad-b),
+    var(--grad-c),
+    var(--grad-a)
+  );
+  animation: scan-spin 3.2s linear infinite;
+}
+@property --scan-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes scan-spin {
+  to {
+    --scan-angle: 360deg;
+  }
+}
+
+/* Gradient progress bar fill */
+.meter-fill {
+  background: linear-gradient(90deg, var(--grad-a), var(--grad-b));
+  transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}

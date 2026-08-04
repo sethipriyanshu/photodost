@@ -1,0 +1,59 @@
+# dependencies
+node_modules/
+.pnpm-store/
+.tools/
+
+# build outputs
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# local tooling state (per-developer, not project config)
+.claude/settings.local.json
+.claude/**/*.tmp.*
+
+# logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ML model cache
+apps/ml/models/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+tmp/
+*.tmp

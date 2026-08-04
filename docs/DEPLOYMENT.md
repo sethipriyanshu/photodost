@@ -1,0 +1,216 @@
+# Deployment runbook
+
+Ordered path from "works on my laptop" to "taking real money". Each step is checkable; later steps assume earlier ones.
+
+**Legend:** 🔴 blocker (nothing works without it) · 🟠 needed before real customers · 🟡 should-do, not blocking
+
+---
+
+## Stage 0 — Repo foundations
+
+### 0.1 🔴 Put this in git
+
+There is no git repository. Vercel deploys from git, and `.github/workflows/ci.yml` has never run.
+
+```bash
+git init -b main
+git add -A
+git commit -m "PhotoDost: face-recognition photo delivery"
+gh repo create photodost --private --source=. --push
+```
+
+Confirm `.gitignore` covers `.env` (it does) and that **no `.env` file is in the commit**:
+
+```bash
+git ls-files | grep -E '(^|/)\.env$' && echo "STOP — secrets staged" || echo "clean"
+```
+
+Your Cashfree sandbox keys are in `apps/web/.env` and `.env`. Both are ignored, but verify before pushing.
+
+### 0.2 🔴 Get CI green
+
+`pnpm format:check`, `typecheck`, `lint` and `build` all pass locally as of now — formatting had been failing on 28 files and was fixed. Push and confirm the Actions run is green before building on top of it.
+
+### 0.3 🟠 Switch from `db:push` to real migrations
+
+There is no `packages/db/drizzle` directory — the schema has only ever been applied with `drizzle-kit push`, which diffs and can **drop columns** without asking. That is acceptable on a laptop and not acceptable against production data.
+
+```bash
+pnpm db:generate          # writes versioned SQL
+git add packages/db && git commit -m "Baseline migration"
+```
+
+Then use `drizzle-kit migrate` (not `push`) for every production deploy. Add a `db:migrate` script and run it as a release step.
+
+---
+
+## Stage 1 — Finish proving billing (sandbox)
+
+### 1.1 🔴 Authorize a mandate in a browser
+
+Every Cashfree API call is verified, but **no mandate has been authorized through the checkout modal and no webhook has reached a running instance.** This is the single largest untested gap.
+
+```bash
+cloudflared tunnel --url http://localhost:3030
+```
+
+Then, in `apps/web/.env`, point `APP_URL` and `BETTER_AUTH_URL` at the printed HTTPS URL and set `BILLING_ENABLED=true`.
+
+In the Cashfree dashboard → Developers → Webhooks, add `https://<tunnel>/api/billing/webhook` with these four events:
+`SUBSCRIPTION_STATUS_CHANGED`, `SUBSCRIPTION_AUTH_STATUS`, `SUBSCRIPTION_PAYMENT_SUCCESS`, `SUBSCRIPTION_PAYMENT_FAILED`.
+
+Walk it: `/app/billing` → enter a mobile number → **Choose Pro** → authorize with sandbox VPA `success@upi`.
+
+Verify:
+
+```sql
+select plan, billing_plan_key, subscription_status, current_period_end, billing_phone
+from workspaces;
+```
+
+Expect `plan='pro'`, `subscription_status='active'`, a non-null `current_period_end`. Then check the webhook shows a 200 delivery.
+
+### 1.2 🟠 Test the failure paths
+
+- `failure@upi` → mandate declines, workspace stays unchanged.
+- Cancel → `cancel_at_period_end=true`, quotas **unchanged**.
+- Set `current_period_end` to the past, restart the worker → billing sweep issues the real CANCEL and drops to `free`.
+- Set `subscription_status='past_due'` → uploads blocked, guest gallery still works.
+
+---
+
+## Stage 2 — Provision production infrastructure
+
+### 2.1 🔴 Postgres — Neon
+
+Needs the `vector` extension. Create the DB, then:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Apply migrations, then confirm the HNSW index exists — the worker creates it on boot (`ensureHnswIndex`), but verify rather than assume:
+
+```sql
+select indexname from pg_indexes where tablename = 'face_embeddings';
+```
+
+### 2.2 🔴 Redis — Upstash
+
+BullMQ needs Redis. Upstash's TLS URL (`rediss://`) works with ioredis. Note BullMQ holds long-lived connections, so use the **non-serverless** Upstash endpoint or a Railway Redis.
+
+### 2.3 🔴 Object storage — Backblaze B2 + Cloudflare
+
+1. Create a **private** B2 bucket.
+2. Create an application key scoped to that bucket. Copy `keyID` and `applicationKey`.
+3. Put a Cloudflare-proxied custom domain in front of it (e.g. `cdn.photodost.app`).
+   **This matters:** serving from the raw `f004.backblazeb2.com` URL bills egress and defeats the entire reason for choosing B2. Egress is free only through Cloudflare (Bandwidth Alliance).
+4. Set the production block from `apps/web/.env.example`, with `S3_FORCE_PATH_STYLE=false`.
+
+Then verify against real B2 — the code is provider-agnostic and hardened for it, but has only been exercised against MinIO:
+
+- a presigned browser upload succeeds
+- `HeadObject` returns the right `ContentLength`
+- the worker's variant upload succeeds
+- an object is fetchable through the Cloudflare domain
+- `deleteObject` works (the retention purge depends on it)
+
+### 2.4 🔴 SMTP
+
+Currently Mailpit only. Magic-link sign-in **and** the retention warning emails both depend on real SMTP. Use Resend/SES/Postmark, set `SMTP_*` + `EMAIL_FROM`, and verify your sending domain (SPF/DKIM) — sign-in emails landing in spam means nobody can log in.
+
+### 2.5 🔴 Rotate every secret
+
+```bash
+openssl rand -hex 32     # BETTER_AUTH_SECRET
+```
+
+`apps/web/.env:16` still holds the placeholder `replace-me-with-a-32-byte-random-string`; auth will not boot on it. Production values go in the host's env settings, never in a file.
+
+---
+
+## Stage 3 — Things that don't exist yet
+
+### 3.1 🔴 Worker Dockerfile
+
+Only `apps/ml/Dockerfile` exists. The worker has no deploy artifact. It needs a multi-stage build that installs pnpm workspace deps, builds `@photodost/db` and the worker, and runs `node dist/index.js`. Note it needs `sharp` (native) — use a Debian-based Node 22 image, not Alpine, or install the musl build explicitly.
+
+### 3.2 🔴 Lock down the ML service
+
+`apps/ml` has **no authentication of any kind** — no token, no allowlist. Deployed publicly, anyone can post images to `/embed` and burn your CPU.
+
+Either bind it to a private network so only the worker can reach it, or add a shared-secret header check in `apps/ml/app/main.py` plus an `ML_SERVICE_TOKEN` the worker sends. Do not deploy it publicly as-is.
+
+### 3.3 🟠 Make `/api/healthz` mean something
+
+It currently returns `{status: "ok"}` unconditionally without touching Postgres, Redis or S3 — so a platform health check passes while the app is completely broken. Have it check each dependency and return 503 when one is down.
+
+### 3.4 🟠 Bulk download
+
+The retention emails tell photographers to "download anything you want to keep", but there is no way to download an event in bulk — only one photo at a time. Shipping deletion warnings without this makes them substantially unfair.
+
+---
+
+## Stage 4 — Deploy
+
+### 4.1 Web → Vercel
+
+Import the repo, root `apps/web`, and set every env var from `apps/web/.env.example` with production values. Add `db:migrate` as a build/release step.
+
+### 4.2 Worker + ML → Railway or Fly
+
+Two services from the same repo. The worker needs `DATABASE_URL`, `REDIS_URL`, `S3_*`, `ML_SERVICE_URL`, `SMTP_*`, `APP_URL`, and the three `CASHFREE_*` vars plus `BILLING_ENABLED` — **it reads its own env, not the web app's**, so these must be set on the worker too or the billing sweep and retention warnings silently no-op.
+
+The ML image pulls the ~290 MB `buffalo_l` model. Give it ≥2 GB RAM and expect a slow cold start; keep at least one instance warm or guest search falls back to "show all photos".
+
+### 4.3 Point DNS
+
+Apex/`www` → Vercel. `cdn` → the B2 bucket via Cloudflare.
+
+---
+
+## Stage 5 — Go live
+
+### 5.1 🔴 Cashfree production
+
+Complete KYC (PAN, GST if registered, bank proof) and get Subscriptions + UPI Autopay activated on the **live** account. Then:
+
+```bash
+pnpm billing:create-plans     # with production keys — plans are per-environment
+```
+
+Set `CASHFREE_MODE=production` and the live keys. `billingConfigError()` will refuse a test key in production mode, which is the intended guardrail.
+
+Register the production webhook at `https://<domain>/api/billing/webhook`.
+
+### 5.2 🔴 Smoke test production with a real ₹999
+
+Sandbox proves the wiring; only a live transaction proves the account. Subscribe on the cheapest tier with your own UPI, confirm the row and the webhook, then cancel.
+
+### 5.3 🟠 Flip the flag
+
+`BILLING_ENABLED=true` on **both** web and worker. Until then everything runs on Beta quotas and nothing is charged.
+
+### 5.4 🟠 Legal and compliance
+
+Face embeddings are biometric data under India's DPDP Act. The guest consent checkbox exists; the surrounding paperwork does not. You need a privacy policy stating what's collected and for how long, terms of service, refund/cancellation policy (Cashfree requires this for KYC), and pricing pages that state GST treatment. Confirm whether your displayed prices are GST-inclusive — the unit economics in `DEVELOPMENT_PLAN.md` §2 assume they are.
+
+---
+
+## Stage 6 — After launch
+
+- 🟡 **Error tracking** — Sentry on web and worker. There is none.
+- 🟡 **Uptime checks** — on `/api/healthz` and the ML service.
+- 🟡 **Dunning** — nothing emails a customer when a charge fails.
+- 🟡 **GST invoices** — Cashfree can generate them; nothing requests or stores them.
+- 🟡 **Proration** — a plan change creates a second subscription without cancelling the first. Fix before anyone upgrades mid-cycle.
+- 🟡 **Backups** — verify Neon PITR is on. Note that photo objects are **not** backed up, and the retention purge deletes them irreversibly.
+- 🟡 **Tests** — there are none. The riskiest untested logic is `accessEndedAtSql()`, which decides whose photos get deleted; it's verified by hand but has no regression test.
+
+---
+
+## Shortest path to a live payment
+
+If you want to compress this: **0.1 → 0.2 → 1.1 → 2.1–2.5 → 3.1 → 3.2 → 4.x → 5.1 → 5.2**.
+
+Everything else can follow, with two exceptions I would not skip: **3.2** (an unauthenticated ML service is a standing invitation) and **3.4** (deleting photos after telling people to download them, with no way to download them).
