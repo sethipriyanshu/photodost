@@ -41,4 +41,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8000/healthz || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Bind dual-stack (`::`) by default, not 0.0.0.0. Railway's private network is
+# IPv6-only, so an IPv4-only listener is simply unreachable at
+# <service>.railway.internal — and since face matching degrades gracefully to
+# "show all photos", that failure is silent rather than loud. On Linux, `::`
+# accepts IPv4 connections too, so this is also correct locally.
+# Shell form so ML_HOST / ML_PORT are honoured (settings.py already defines them).
+CMD ["sh", "-c", "uvicorn app.main:app --host ${ML_HOST:-::} --port ${ML_PORT:-8000}"]

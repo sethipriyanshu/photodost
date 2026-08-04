@@ -52,7 +52,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+# Dual-stack, not 0.0.0.0 — platform proxies and private networking on Railway
+# reach services over IPv6, and an IPv4-only listener is unreachable there. On
+# Linux `::` accepts IPv4 too, so this stays correct locally.
+ENV HOSTNAME=::
 
 # Next's standalone output already contains the traced node_modules, so there is
 # no pnpm install here at all.
