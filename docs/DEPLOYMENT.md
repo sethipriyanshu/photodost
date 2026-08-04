@@ -157,23 +157,63 @@ The retention emails tell photographers to "download anything you want to keep",
 
 ---
 
-## Stage 4 — Deploy
+## Stage 4 — Deploy (decided: Railway for everything)
 
-### 4.1 Web → Vercel
+**Decision:** all three services on Railway Hobby, face matching **on** from day one.
+~₹1,843/month. Reviewed after two months against a kill criterion (see below).
 
-Import the repo, root `apps/web`, and set every env var from `apps/web/.env.example` with production values. Add `db:migrate` as a build/release step.
+Rejected alternatives and why, so this isn't re-argued later:
 
-### 4.2 Worker + ML → Railway or Fly
+| Option | ₹/mo | Why not |
+|---|---|---|
+| Hetzner CX22, all-in-one | 360 | Cheapest with ML on, but we'd administer the box |
+| Railway staged, no ML | 523 | Launches with the core differentiator switched off |
+| Fly.io, ML autosuspend | 450–600 | Good fit, but a new platform to learn under time pressure |
+| Oracle Always Free | 0 | Signup/capacity unpredictable; instances can be reclaimed |
 
-Two services from the same repo. The worker needs `DATABASE_URL`, `REDIS_URL`, `S3_*`, `ML_SERVICE_URL`, `SMTP_*`, `APP_URL`, and the three `CASHFREE_*` vars plus `BILLING_ENABLED` — **it reads its own env, not the web app's**, so these must be set on the worker too or the billing sweep and retention warnings silently no-op.
+### The kill criterion
 
-The ML image pulls the ~290 MB `buffalo_l` model. Give it ≥2 GB RAM and expect a slow cold start; keep at least one instance warm or guest search falls back to "show all photos".
+Because billing is annual, cash arrives upfront: **4 paying customers (~₹4,000) covers the
+entire two-month experiment cost of ₹3,686.** Monthly margin break-even is 29 customers, but
+that is the wrong number to judge the experiment by. Review at 60 days on customers acquired.
 
-### 4.3 Point DNS
+### 4.1 Services
 
-Apex/`www` → Vercel. `cdn` → the B2 bucket via Cloudflare.
+Three Railway services from this repo, plus Redis:
 
----
+| Service | Build | Notes |
+|---|---|---|
+| `web` | `apps/web/Dockerfile` | Next.js standalone output |
+| `worker` | `apps/worker/Dockerfile` | already built and boot-tested |
+| `ml` | `apps/ml/Dockerfile` | needs ≥2 GB; the memory cost driver |
+| `redis` | Railway plugin | private networking, eviction off |
+
+Set the region to **Singapore** on every service to match Neon.
+
+### 4.2 Env vars, per service
+
+Each service reads its own env — the worker does **not** see the web app's. Missing
+`CASHFREE_*` on the worker silently disables the cancellation sweep and retention emails.
+
+- **web** — `DATABASE_URL` (pooled), `REDIS_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+  `APP_URL`, `S3_*`, `S3_PUBLIC_URL`, `ML_SERVICE_URL`, `ML_SERVICE_TOKEN`, `SMTP_*`,
+  `EMAIL_FROM`, `BILLING_ENABLED`, `CASHFREE_*`
+- **worker** — `DATABASE_URL` (pooled), `REDIS_URL`, `S3_*`, `ML_SERVICE_URL`,
+  `ML_SERVICE_TOKEN`, `SMTP_*`, `EMAIL_FROM`, `APP_URL`, `BILLING_ENABLED`, `CASHFREE_*`
+- **ml** — `ML_ENV=production`, `ML_SERVICE_TOKEN` (same value everywhere)
+
+`ML_SERVICE_URL` uses Railway's private hostname so the ML service is never public.
+With `ML_ENV=production` it refuses to boot without a token, which is the intended guard.
+
+### 4.3 Migrations
+
+Run from your machine against the **direct** (non-pooler) Neon URL:
+
+```bash
+DATABASE_URL="<DIRECT_URL>" pnpm db:migrate
+```
+
+Not `db:push` — it diffs and can drop columns.
 
 ## Stage 5 — Go live
 
