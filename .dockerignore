@@ -1,0 +1,43 @@
+# Build context hygiene. Without this the context includes every node_modules
+# and .next directory in the monorepo, which makes builds slow and can leak
+# local state into images.
+
+node_modules
+**/node_modules
+.pnpm-store
+.tools
+
+**/dist
+**/build
+**/.next
+**/.turbo
+*.tsbuildinfo
+
+# Never ship local secrets into an image layer.
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+.git
+.github
+.vscode
+.idea
+.claude
+
+# Python / ML local state (the ml service has its own Dockerfile)
+**/__pycache__
+**/.venv
+**/venv
+apps/ml/models
+
+*.log
+logs
+coverage
+.nyc_output
+.DS_Store
+
+# Docs aren't needed to build anything.
+*.md
+docs

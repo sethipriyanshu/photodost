@@ -15,7 +15,8 @@
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit",
-    "lint": "echo \"(lint placeholder)\""
+    "lint": "echo \"(lint placeholder)\"",
+    "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
