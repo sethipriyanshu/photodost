@@ -1,3 +1,7 @@
+# PhotoDost ML — face detection + embedding (InsightFace buffalo_l).
+#
+# Build from the REPO ROOT, not this directory:
+#   docker build -f apps/ml/Dockerfile -t photodost-ml .
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -20,7 +24,10 @@ RUN apt-get update \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+# Paths are relative to the REPO ROOT, not apps/ml — the build context is the
+# whole repo, matching apps/web and apps/worker (both of which need the
+# workspace lockfile and so cannot use a narrower context).
+COPY apps/ml/requirements.txt ./
 RUN pip install -r requirements.txt \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -34,7 +41,7 @@ RUN python -c "from insightface.app import FaceAnalysis; \
     app.prepare(ctx_id=-1, det_size=(640,640)); \
     print('Model pack baked into image')"
 
-COPY app ./app
+COPY apps/ml/app ./app
 
 EXPOSE 8000
 

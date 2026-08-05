@@ -95,8 +95,10 @@ services:
   # initial `infra:up` takes a few extra minutes. Subsequent builds are cached.
   ml:
     build:
-      context: ../../apps/ml
-      dockerfile: Dockerfile
+      # Repo root, so apps/ml/Dockerfile's COPY paths resolve the same way
+      # here as they do on the deploy platform.
+      context: ../..
+      dockerfile: apps/ml/Dockerfile
     container_name: photodost-ml
     restart: unless-stopped
     environment:
