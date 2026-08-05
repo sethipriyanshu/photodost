@@ -52,10 +52,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-# Dual-stack, not 0.0.0.0 — platform proxies and private networking on Railway
-# reach services over IPv6, and an IPv4-only listener is unreachable there. On
-# Linux `::` accepts IPv4 too, so this stays correct locally.
-ENV HOSTNAME=::
 
 # Next's standalone output already contains the traced node_modules, so there is
 # no pnpm install here at all.
@@ -73,4 +69,16 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/healthz?deep=0').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "apps/web/server.js"]
+# HOSTNAME is set on the command line, not via ENV, and this is load-bearing.
+#
+# Next's standalone server binds to whatever `HOSTNAME` holds. `HOSTNAME` is also
+# a conventional POSIX variable that container platforms set to the container's
+# own hostname — and a runtime value injected by the platform overrides an image
+# `ENV`. When that happens Next tries to bind to a name that doesn't resolve and
+# dies with `getaddrinfo ENOTFOUND <container-id>`, so the platform's health
+# check reports "service unavailable" and the deploy rolls back with no obvious
+# cause. Assigning it here beats anything the platform injects.
+#
+# `::` is dual-stack: Railway reaches services over IPv6, and on Linux a `::`
+# listener still accepts IPv4, so this is also correct locally.
+CMD ["sh", "-c", "HOSTNAME=:: PORT=${PORT:-3000} exec node apps/web/server.js"]
