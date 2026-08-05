@@ -1,10 +1,4 @@
 import { NextResponse } from "next/server";
-import { HeadBucketCommand } from "@aws-sdk/client-s3";
-import { sql } from "drizzle-orm";
-import { Redis } from "ioredis";
-import { db } from "@/lib/db";
-import { env } from "@/lib/env";
-import { BUCKET, s3 } from "@/lib/s3";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,13 +6,18 @@ export const dynamic = "force-dynamic";
 /**
  * Health probe for the platform's load balancer.
  *
- * This previously returned `{status:"ok"}` unconditionally, so the check passed
- * while Postgres, Redis and storage were all unreachable — the platform would
- * keep routing traffic to a completely broken instance. Each dependency is now
- * actually contacted.
+ * Nothing is imported at module scope on purpose. `lib/env` throws on a missing
+ * required variable, so importing it here would take the whole route down when
+ * the app is misconfigured — which is exactly when a health check most needs to
+ * answer. A misconfigured deploy then reports an opaque "service unavailable"
+ * instead of naming the variable that's missing.
  *
- * `?deep=0` returns liveness only, for callers that just want to know the process
- * is answering without paying for three round-trips.
+ * So: every dependency is imported lazily, inside its own check, and a config
+ * error is reported as a failed check rather than crashing the handler.
+ *
+ * - `?deep=0` — liveness. Cannot fail while the process is running.
+ * - default    — readiness. Contacts Postgres, Redis and the bucket; 503 if any
+ *                is unreachable, with the reason in the body.
  */
 
 const TIMEOUT_MS = 3_000;
@@ -45,33 +44,43 @@ async function timed(name: string, fn: () => Promise<unknown>): Promise<CheckRes
 }
 
 function checkPostgres(): Promise<CheckResult> {
-  return timed("postgres", () => db.execute(sql`select 1`));
+  return timed("postgres", async () => {
+    const [{ db }, { sql }] = await Promise.all([import("@/lib/db"), import("drizzle-orm")]);
+    await db.execute(sql`select 1`);
+  });
 }
 
 function checkStorage(): Promise<CheckResult> {
-  return timed("storage", () => s3.send(new HeadBucketCommand({ Bucket: BUCKET })));
+  return timed("storage", async () => {
+    const [{ BUCKET, s3 }, { HeadBucketCommand }] = await Promise.all([
+      import("@/lib/s3"),
+      import("@aws-sdk/client-s3"),
+    ]);
+    await s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+  });
 }
 
 /**
  * A dedicated short-lived connection rather than the app's shared queue client —
  * a probe should observe Redis, not disturb the pool the request path depends on.
  */
-async function checkRedis(): Promise<CheckResult> {
-  const client = new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: 1,
-    connectTimeout: TIMEOUT_MS,
-    lazyConnect: true,
-    // Without this, ioredis keeps retrying and the probe outlives its own timeout.
-    retryStrategy: () => null,
-  });
-  try {
-    return await timed("redis", async () => {
+function checkRedis(): Promise<CheckResult> {
+  return timed("redis", async () => {
+    const [{ env }, { Redis }] = await Promise.all([import("@/lib/env"), import("ioredis")]);
+    const client = new Redis(env.REDIS_URL, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: TIMEOUT_MS,
+      lazyConnect: true,
+      // Without this, ioredis keeps retrying and outlives the probe's own timeout.
+      retryStrategy: () => null,
+    });
+    try {
       await client.connect();
       await client.ping();
-    });
-  } finally {
-    client.disconnect();
-  }
+    } finally {
+      client.disconnect();
+    }
+  });
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -91,8 +100,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     .map(([name]) => name);
 
   // 503 so the platform actually reacts. This takes an instance out of rotation
-  // during a dependency blip, which is the right trade for a health check — the
-  // alternative is quietly serving errors while reporting green.
+  // during a dependency blip, which is the right trade for a readiness check —
+  // the alternative is quietly serving errors while reporting green.
   return NextResponse.json(
     {
       status: failed.length === 0 ? "ok" : "degraded",
