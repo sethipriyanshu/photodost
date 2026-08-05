@@ -67,6 +67,10 @@ const config: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(self), microphone=()" },
+          // Guests submit a selfie — biometric data — so downgrade attacks are
+          // worth closing off. No `preload` and no `includeSubDomains` yet:
+          // both are hard to walk back, and the production domain isn't final.
+          { key: "Strict-Transport-Security", value: "max-age=15552000" },
         ],
       },
     ];

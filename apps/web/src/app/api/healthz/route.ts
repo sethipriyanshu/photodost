@@ -66,7 +66,21 @@ function checkStorage(): Promise<CheckResult> {
  */
 function checkRedis(): Promise<CheckResult> {
   return timed("redis", async () => {
-    const [{ env }, { Redis }] = await Promise.all([import("@/lib/env"), import("ioredis")]);
+    const [{ env }, ioredis] = await Promise.all([import("@/lib/env"), import("ioredis")]);
+
+    // ioredis is CommonJS. A static `import { Redis } from "ioredis"` is fixed up
+    // by the bundler, but under `await import()` the named export can land on
+    // `.default` instead — which fails at runtime as "b is not a constructor"
+    // (the minified name), not as a missing-export error. So resolve both shapes.
+    const mod = ioredis as unknown as {
+      Redis?: typeof import("ioredis").Redis;
+      default?: { Redis?: typeof import("ioredis").Redis } & typeof import("ioredis").Redis;
+    };
+    const Redis = mod.Redis ?? mod.default?.Redis ?? mod.default;
+    if (typeof Redis !== "function") {
+      throw new Error("could not resolve the ioredis constructor from its module");
+    }
+
     const client = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       connectTimeout: TIMEOUT_MS,
