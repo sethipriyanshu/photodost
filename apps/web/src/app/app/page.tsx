@@ -4,7 +4,6 @@ import { ArrowRight, Camera, HardDrive, Plus, Settings2, Users } from "lucide-re
 import { requireWorkspace } from "@/lib/session";
 import { countWorkspaceEvents } from "@/lib/events";
 import { PLANS, effectiveQuotas } from "@/lib/storage";
-import { billingReady } from "@/lib/billing-config";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -29,11 +28,14 @@ export default async function DashboardPage() {
   const eventCount = await countWorkspaceEvents(workspace.id);
 
   const quotas = effectiveQuotas(workspace);
-  // Keyed off readiness, not the raw flag: a deploy with BILLING_ENABLED=true
-  // but Cashfree unconfigured is still running on Beta quotas, and the badge
-  // needs to say so rather than claim a plan that isn't being enforced.
-  const billingLive = billingReady();
-  const planLabel = billingLive ? PLANS[workspace.plan].label : "Beta";
+  // The plan on the row is the plan being enforced — there is no gateway to be
+  // half-configured, so the badge can state it plainly.
+  const planLabel = PLANS[workspace.plan].label;
+  const onTrial = workspace.plan === "free";
+  const trialDaysLeft =
+    onTrial && workspace.trialEndsAt
+      ? Math.ceil((workspace.trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      : null;
 
   return (
     <div className="relative min-h-dvh">
@@ -78,7 +80,11 @@ export default async function DashboardPage() {
           >
             <span className="bg-primary size-1.5 animate-pulse rounded-full" />
             {planLabel}
-            {!billingLive ? " · unlimited" : null}
+            {trialDaysLeft !== null
+              ? trialDaysLeft > 0
+                ? ` · ${trialDaysLeft}d left`
+                : " · expired"
+              : null}
           </Link>
         </div>
 

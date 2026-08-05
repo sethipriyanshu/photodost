@@ -1,7 +1,8 @@
 import "server-only";
 import { and, eq, ne } from "drizzle-orm";
-import { TRIAL_DAYS } from "@photodost/db";
+import { PROVISIONED_DAYS, TRIAL_DAYS } from "@photodost/db";
 import { db, schema } from "./db";
+import { PLANS } from "./storage";
 import { slugify } from "./tokens";
 
 export type Workspace = typeof schema.workspaces.$inferSelect;
@@ -107,6 +108,26 @@ export async function createWorkspace(opts: {
       slug = `${base}-${attempt}`;
     }
 
+    // Did the admin sell this person a plan? Payment is taken in person, so the
+    // purchase is recorded on the user at provisioning time and collected here,
+    // when they finish naming their studio. A self-serve Google signup has none
+    // of this and gets the free trial instead.
+    const [owner] = await tx
+      .select({
+        provisionedPlan: schema.user.provisionedPlan,
+        provisionedUntil: schema.user.provisionedUntil,
+      })
+      .from(schema.user)
+      .where(eq(schema.user.id, opts.userId))
+      .limit(1);
+
+    const provisioned =
+      owner?.provisionedPlan && owner.provisionedPlan !== "free"
+        ? { plan: owner.provisionedPlan, until: owner.provisionedUntil }
+        : null;
+
+    const definition = provisioned ? PLANS[provisioned.plan] : null;
+
     const [workspace] = await tx
       .insert(schema.workspaces)
       .values({
@@ -114,11 +135,25 @@ export async function createWorkspace(opts: {
         slug,
         ownerUserId: opts.userId,
         accentColor: opts.accentColor ?? "#5046E5",
-        // Quotas default to the free tier; the billing webhook overwrites them
-        // with the purchased plan's allotments once a subscription activates.
-        // The trial clock starts here — this is the only place it's ever set,
-        // so a workspace can't extend its own trial by re-onboarding.
-        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+        ...(definition && provisioned
+          ? {
+              plan: provisioned.plan,
+              eventQuota: definition.eventQuota,
+              storageQuotaBytes: definition.quotaBytes,
+              subscriptionStatus: "active" as const,
+              // The term the admin sold. Nothing renews it automatically — the
+              // customer contacts the admin again and the admin extends it.
+              currentPeriodEnd:
+                provisioned.until ?? new Date(Date.now() + PROVISIONED_DAYS * 24 * 60 * 60 * 1000),
+              // No trial: they paid.
+              trialEndsAt: null,
+            }
+          : {
+              // Quotas default to the free tier. The trial clock starts here —
+              // the only place it's ever set, so a workspace can't extend its
+              // own trial by re-onboarding.
+              trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+            }),
       })
       .returning();
 
@@ -127,6 +162,15 @@ export async function createWorkspace(opts: {
       userId: opts.userId,
       role: "owner",
     });
+
+    // Consume the provisioning record so it can't be replayed onto a second
+    // workspace if this user somehow onboards again.
+    if (provisioned) {
+      await tx
+        .update(schema.user)
+        .set({ provisionedPlan: null, provisionedUntil: null, updatedAt: new Date() })
+        .where(eq(schema.user.id, opts.userId));
+    }
 
     return workspace!;
   });

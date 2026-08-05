@@ -1,27 +1,16 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, MessageCircle, Phone } from "lucide-react";
 import { requireWorkspace } from "@/lib/session";
 import { countWorkspaceEvents } from "@/lib/events";
-import { billingConfigError, billingReady, formatInr } from "@/lib/billing";
-import { RETENTION_GRACE_DAYS } from "@photodost/db";
-import {
-  BILLING_ENABLED,
-  PAID_PLANS,
-  PLANS,
-  TRIAL_DAYS,
-  effectiveQuotas,
-  parsePlanKey,
-} from "@/lib/storage";
+import { SALES_CONTACT } from "@/lib/contact";
+import { PAID_PLANS, PLANS, TRIAL_DAYS, effectiveQuotas, formatBytes } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
-import { PlanPicker } from "./plan-picker";
 
-export const metadata: Metadata = { title: "Plan & billing" };
+export const metadata: Metadata = { title: "Your plan" };
 export const dynamic = "force-dynamic";
 
 const GB = 1024 * 1024 * 1024;
-const MB = 1024 * 1024;
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-IN", {
@@ -31,44 +20,26 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-/** Storage caps span 500 MB to 100 GB, so pick the unit per value. */
-function formatQuota(bytes: number): string {
-  return bytes >= GB ? `${Math.round(bytes / GB)} GB` : `${Math.round(bytes / MB)} MB`;
-}
-
+/**
+ * Plan page for V1: no gateway, no checkout.
+ *
+ * Plans are bought by contacting the admin, who takes payment in person and
+ * provisions the account by hand. So this page's job is to show what you're on,
+ * when it ends, and how to get more — not to process a payment.
+ */
 export default async function BillingPage() {
   const { workspace } = await requireWorkspace();
   const eventCount = await countWorkspaceEvents(workspace.id);
   const quotas = effectiveQuotas(workspace);
 
-  const live = billingReady();
-  const configError = billingConfigError();
-  const current = parsePlanKey(workspace.billingPlanKey);
-  // A paid plan only counts as current while the subscription is actually good
-  // for it — a past_due or canceled row shouldn't render as "Current".
-  const onPaidPlan =
-    current !== null && workspace.plan !== "free" && workspace.subscriptionStatus === "active";
+  const plan = PLANS[workspace.plan];
+  const onTrial = workspace.plan === "free";
+  const endsAt = onTrial ? workspace.trialEndsAt : workspace.currentPeriodEnd;
+  const expired = endsAt !== null && endsAt.getTime() <= Date.now();
+  const cancelled = workspace.subscriptionStatus === "canceled";
 
-  const trialActive = live && workspace.plan === "free" && workspace.trialEndsAt !== null;
-  const trialExpired = trialActive && workspace.trialEndsAt!.getTime() <= Date.now();
-
-  // Mirror of `accessEndedAtSql()` in @photodost/db — the clause order matters
-  // for the same reason it does there: a cancelled ex-subscriber has plan 'free'
-  // and a long-expired trial date, so `canceled` must be checked first or this
-  // would show a deletion date in the past.
-  const accessEndedAt =
-    workspace.subscriptionStatus === "canceled"
-      ? (workspace.currentPeriodEnd ?? workspace.updatedAt)
-      : workspace.plan === "free" &&
-          (workspace.subscriptionStatus === "trialing" ||
-            workspace.subscriptionStatus === "incomplete")
-        ? workspace.trialEndsAt
-        : null;
-
-  const deleteOn =
-    accessEndedAt && accessEndedAt.getTime() <= Date.now() && !workspace.photosPurgedAt
-      ? new Date(accessEndedAt.getTime() + RETENTION_GRACE_DAYS * 24 * 60 * 60 * 1000)
-      : null;
+  const daysLeft =
+    endsAt && !expired ? Math.ceil((endsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
 
   return (
     <div className="mx-auto min-h-dvh max-w-4xl px-4 py-8 sm:px-6">
@@ -82,9 +53,10 @@ export default async function BillingPage() {
       </header>
 
       <div className="mt-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Plan &amp; billing</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Your plan</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Every paid plan is billed yearly and capped only by total storage — events are unlimited.
+          Plans are billed yearly and capped by total storage. Events are unlimited on every paid
+          plan.
         </p>
       </div>
 
@@ -93,115 +65,124 @@ export default async function BillingPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold">Current plan</h2>
-            <p className="mt-1 text-2xl font-bold tracking-tight">
-              {!live ? "Beta" : onPaidPlan ? PLANS[current.plan].label : PLANS.free.label}
-            </p>
+            <p className="mt-1 text-2xl font-bold tracking-tight">{plan.label}</p>
             <p className="text-muted-foreground mt-1 text-sm">
               {quotas.eventQuota === null
                 ? `${eventCount} events`
                 : `${eventCount} / ${quotas.eventQuota} events`}{" "}
-              · {(workspace.storageUsedBytes / GB).toFixed(1)} GB /{" "}
-              {formatQuota(quotas.storageQuotaBytes)} storage
+              · {formatBytes(workspace.storageUsedBytes)} / {formatBytes(quotas.storageQuotaBytes)}{" "}
+              storage
             </p>
           </div>
 
-          {live && onPaidPlan && workspace.currentPeriodEnd ? (
+          {endsAt ? (
             <div className="text-right text-sm">
               <p className="text-muted-foreground">
-                {workspace.cancelAtPeriodEnd ? "Access until" : "Renews on"}
+                {cancelled
+                  ? "Access until"
+                  : expired
+                    ? onTrial
+                      ? "Trial ended"
+                      : "Ended"
+                    : onTrial
+                      ? "Trial ends"
+                      : "Valid until"}
               </p>
-              <p className="font-medium">{formatDate(workspace.currentPeriodEnd)}</p>
-            </div>
-          ) : trialActive ? (
-            <div className="text-right text-sm">
-              <p className="text-muted-foreground">{trialExpired ? "Trial ended" : "Trial ends"}</p>
-              <p className="font-medium">{formatDate(workspace.trialEndsAt!)}</p>
+              <p className="font-medium">{formatDate(endsAt)}</p>
+              {daysLeft !== null ? (
+                <p className="text-muted-foreground text-xs">
+                  {daysLeft} day{daysLeft === 1 ? "" : "s"} left
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
 
-        {live && workspace.subscriptionStatus === "past_due" ? (
+        {cancelled ? (
           <p className="border-border text-destructive mt-4 border-t pt-4 text-sm">
-            A payment failed. New events and uploads are paused until it clears — existing galleries
-            keep working for your guests.
+            This account has been closed. Existing galleries and guest search keep working — contact
+            us to reactivate it.
           </p>
-        ) : trialExpired ? (
+        ) : expired ? (
           <p className="border-border text-destructive mt-4 border-t pt-4 text-sm">
-            Your {TRIAL_DAYS}-day free trial has ended. Choose a plan to create events and upload
-            again — what you&apos;ve already shared stays live for your guests.
-          </p>
-        ) : null}
-
-        {/* The countdown to irreversible deletion, while there's still time to act. */}
-        {live && workspace.photosPurgedAt ? (
-          <p className="border-border text-muted-foreground mt-4 border-t pt-4 text-sm">
-            Your photos were deleted on {formatDate(workspace.photosPurgedAt)} after the retention
-            period ended. Subscribing again lets you upload new photos, but cannot restore these.
-          </p>
-        ) : live && deleteOn ? (
-          <p className="border-border text-destructive mt-4 border-t pt-4 text-sm">
-            <strong>Your photos will be permanently deleted on {formatDate(deleteOn)}.</strong>{" "}
-            Subscribe before then to keep them, or download anything you need — deletion cannot be
-            undone.
+            {onTrial ? `Your ${TRIAL_DAYS}-day free trial has ended.` : "Your plan has ended."} You
+            can&apos;t create events or upload photos until it&apos;s renewed. Everything
+            you&apos;ve already shared stays live for your guests.
           </p>
         ) : null}
       </section>
 
-      {/* Why billing isn't live, when it isn't */}
-      {!live ? (
-        <section className="border-border bg-muted/40 mt-4 rounded-2xl border p-5">
-          <div className="flex gap-3">
-            <AlertTriangle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-            <div className="text-sm">
-              {configError ? (
-                <>
-                  <p className="font-medium">Billing is enabled but not configured.</p>
-                  <p className="text-muted-foreground mt-1">{configError}</p>
-                  <p className="text-muted-foreground mt-2">
-                    Until that&apos;s fixed the app stays on Beta quotas, so nobody gets capped
-                    without a way to upgrade.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium">Beta — everything is unlimited.</p>
-                  <p className="text-muted-foreground mt-1">
-                    Usage is tracked so the meters are real, but nothing is capped and no payment is
-                    taken. The plans below are what will apply once{" "}
-                    <code className="text-xs">BILLING_ENABLED</code> is switched on.
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {/* Plans. Suspense because PlanPicker reads searchParams to reconcile the
-          post-checkout return redirect. */}
-      <Suspense fallback={null}>
-        <PlanPicker
-          live={live}
-          currentPlan={onPaidPlan ? current.plan : null}
-          canCancel={live && onPaidPlan && Boolean(workspace.billingSubscriptionId)}
-          cancelScheduled={workspace.cancelAtPeriodEnd}
-          defaultPhone={workspace.billingPhone}
-          plans={PAID_PLANS.map((plan) => ({
-            plan,
-            label: PLANS[plan].label,
-            blurb: PLANS[plan].blurb,
-            price: formatInr(PLANS[plan].priceInr),
-            eventQuota: PLANS[plan].eventQuota,
-            storageGb: Math.round(PLANS[plan].quotaBytes / GB),
-          }))}
-        />
-      </Suspense>
-
-      {BILLING_ENABLED ? null : (
-        <p className="text-muted-foreground mt-6 text-center text-xs">
-          Prices in INR, billed yearly. GST invoicing lands with the live gateway.
+      {/* How to buy */}
+      <section className="border-primary/30 bg-primary/5 mt-4 rounded-2xl border p-6">
+        <h2 className="font-semibold">
+          {onTrial ? "Ready to upgrade?" : "Need more storage or a renewal?"}
+        </h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Talk to us directly and we&apos;ll set you up. Your account is activated the same day.
         </p>
-      )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button asChild className="rounded-full">
+            <a href={SALES_CONTACT.whatsappUrl} target="_blank" rel="noreferrer">
+              <MessageCircle className="size-4" />
+              WhatsApp us
+            </a>
+          </Button>
+          <Button asChild variant="outline" className="rounded-full">
+            <a href={SALES_CONTACT.telUrl}>
+              <Phone className="size-4" />
+              {SALES_CONTACT.display}
+            </a>
+          </Button>
+        </div>
+      </section>
+
+      {/* Plans */}
+      <section className="mt-6">
+        <h2 className="mb-3 font-semibold">Plans</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {PAID_PLANS.map((key) => {
+            const p = PLANS[key];
+            const isCurrent = workspace.plan === key && !expired && !cancelled;
+            return (
+              <div
+                key={key}
+                className={`border-border bg-card relative rounded-2xl border p-5 ${
+                  isCurrent ? "ring-primary ring-2" : ""
+                }`}
+              >
+                {isCurrent ? (
+                  <span className="bg-primary text-primary-foreground absolute -top-2.5 right-4 rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                    Current
+                  </span>
+                ) : null}
+                <h3 className="font-semibold">{p.label}</h3>
+                <p className="text-muted-foreground mt-1 text-xs">{p.blurb}</p>
+                <p className="mt-3 text-2xl font-bold tracking-tight">
+                  ₹{p.priceInr.toLocaleString("en-IN")}
+                  <span className="text-muted-foreground text-sm font-medium">/yr</span>
+                </p>
+                <ul className="text-muted-foreground mt-4 space-y-1.5 text-sm">
+                  <li className="flex items-center gap-2">
+                    <Check className="text-primary size-3.5" />
+                    {Math.round(p.quotaBytes / GB)} GB storage
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="text-primary size-3.5" />
+                    Unlimited events
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="text-primary size-3.5" />
+                    Unlimited guest searches
+                  </li>
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-muted-foreground mt-4 text-center text-xs">
+          Prices in INR, billed yearly.
+        </p>
+      </section>
     </div>
   );
 }

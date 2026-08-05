@@ -1,12 +1,29 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { magicLink } from "better-auth/plugins";
+import { admin, magicLink, username } from "better-auth/plugins";
 import { db, schema } from "./db";
 import { env } from "./env";
 import { magicLinkEmail, sendEmail } from "./email";
 
 const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
+/**
+ * Magic links are only offered when SMTP is actually configured. Showing the
+ * option without a working mailer produces a button that silently does nothing,
+ * which is worse than not offering it at all.
+ */
+export const magicLinkEnabled = Boolean(env.SMTP_HOST);
+
+/**
+ * Username rules, matching the plugin's own defaults. Exported so the sign-in
+ * form and the admin action validate against exactly the same thing —
+ * `/admin/create-user` bypasses the plugin's validation hooks, so the admin
+ * action has to apply these itself.
+ */
+export const USERNAME_MIN = 3;
+export const USERNAME_MAX = 30;
+export const USERNAME_PATTERN = /^[a-zA-Z0-9_.]+$/;
 
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
@@ -21,8 +38,21 @@ export const auth = betterAuth({
       verification: schema.verification,
     },
   }),
-  // We use passwordless magic links + optional Google; no password auth.
-  emailAndPassword: { enabled: false },
+  /**
+   * Password auth is on for sign-in, but public registration is closed.
+   *
+   * Paid accounts are provisioned by the admin after payment is taken in person,
+   * so nobody should be able to self-register a password account and bypass
+   * that. Self-serve signup is Google only, and that path gets the free trial.
+   *
+   * `disableSignUp` is checked at the top of the sign-up handler with no
+   * server-side bypass, so the admin action cannot use `signUpEmail`. It uses
+   * the admin plugin's `createUser` instead, which does have one.
+   */
+  emailAndPassword: {
+    enabled: true,
+    disableSignUp: true,
+  },
   socialProviders: googleEnabled
     ? {
         google: {
@@ -38,12 +68,31 @@ export const auth = betterAuth({
     cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
   plugins: [
-    magicLink({
-      sendMagicLink: async ({ email, url }) => {
-        const { subject, text, html } = magicLinkEmail(url);
-        await sendEmail({ to: email, subject, text, html });
-      },
+    username({
+      minUsernameLength: USERNAME_MIN,
+      maxUsernameLength: USERNAME_MAX,
     }),
+    /**
+     * Enabled only to make `auth.api.createUser` available to the admin action.
+     *
+     * The `/admin/*` endpoints it mounts are effectively unreachable: an
+     * anonymous request carries headers and is rejected as UNAUTHORIZED, and a
+     * signed-in customer fails the permission check. Nothing is ever assigned
+     * `role: "admin"`, so there is no account to compromise that would unlock
+     * them — the admin area authenticates separately against ADMIN_* env
+     * credentials.
+     */
+    admin(),
+    ...(magicLinkEnabled
+      ? [
+          magicLink({
+            sendMagicLink: async ({ email, url }) => {
+              const { subject, text, html } = magicLinkEmail(url);
+              await sendEmail({ to: email, subject, text, html });
+            },
+          }),
+        ]
+      : []),
   ],
 });
 

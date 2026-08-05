@@ -3,6 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Camera } from "lucide-react";
 import { getSession } from "@/lib/session";
+import { magicLinkEnabled } from "@/lib/auth";
+import { SALES_CONTACT } from "@/lib/contact";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -33,15 +35,23 @@ export default async function SignInPage() {
         <div className="glass rounded-3xl p-6 shadow-xl sm:p-8">
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-muted-foreground mt-1.5 text-sm">
-            We&apos;ll email you a magic link — no password needed.
+            Sign in with the username and password you were given.
           </p>
           <div className="mt-6">
-            <SignInForm googleEnabled={googleEnabled} />
+            <SignInForm googleEnabled={googleEnabled} magicLinkEnabled={magicLinkEnabled} />
           </div>
         </div>
 
         <p className="text-muted-foreground mt-6 text-center text-xs">
-          New here? The same link creates your studio workspace.
+          Don&apos;t have an account?{" "}
+          <a href={SALES_CONTACT.whatsappUrl} className="text-primary underline">
+            Message us on WhatsApp
+          </a>{" "}
+          or call{" "}
+          <a href={SALES_CONTACT.telUrl} className="text-primary underline">
+            {SALES_CONTACT.display}
+          </a>
+          .
         </p>
       </div>
     </div>

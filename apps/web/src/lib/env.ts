@@ -64,4 +64,20 @@ export const env = {
   // Selects the API host: sandbox.cashfree.com/pg vs api.cashfree.com/pg.
   // Cashfree does not infer this from the key, so it must be set explicitly.
   CASHFREE_MODE: process.env.CASHFREE_MODE ?? "sandbox",
+
+  // ---- Admin area (/admin) ----
+  // Payment is taken in person, so accounts are provisioned by hand. This
+  // credential gates that, and is intentionally NOT a Better Auth user: there is
+  // no row in the database to compromise.
+  //
+  // The password is stored only as a scrypt hash — see lib/admin-auth.ts for how
+  // to generate one. With either value unset the admin area refuses to log
+  // anyone in rather than falling back to a default.
+  ADMIN_USERNAME: process.env.ADMIN_USERNAME ?? "",
+  ADMIN_PASSWORD_HASH: process.env.ADMIN_PASSWORD_HASH ?? "",
+
+  // ---- Sales contact ----
+  // Shown on the site so customers can reach the admin to buy a plan. Digits
+  // only, with country code, so it works in both tel: and wa.me links.
+  SALES_PHONE: process.env.SALES_PHONE ?? "917814270662",
 } as const;

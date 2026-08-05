@@ -3,7 +3,8 @@ import {
   ArrowRight,
   Camera,
   Check,
-  Github,
+  MessageCircle,
+  Phone,
   QrCode,
   ScanFace,
   Sparkles,
@@ -14,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { listEvents } from "@/lib/events";
 import { getSessionWorkspace } from "@/lib/session";
+import { SALES_CONTACT } from "@/lib/contact";
+import { PAID_PLANS, PLANS, TRIAL_DAYS } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +180,96 @@ export default async function HomePage() {
           /* Bottom CTA for logged-out visitors */
           <section className="relative mt-24 overflow-hidden rounded-3xl sm:mt-32">
             <div className="aurora" aria-hidden />
+            {/* Pricing. There is no checkout — plans are bought by talking to us,
+                so every card points at the same contact action. */}
+            <div id="pricing" className="mb-16 scroll-mt-20">
+              <div className="text-center">
+                <h2 className="text-balance text-2xl font-bold tracking-tight sm:text-4xl">
+                  Simple yearly pricing
+                </h2>
+                <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm sm:text-base">
+                  Start with a free {TRIAL_DAYS}-day trial. Paid plans are capped by storage only —
+                  run as many events as you like.
+                </p>
+              </div>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {PAID_PLANS.map((key) => {
+                  const plan = PLANS[key];
+                  const featured = key === "pro";
+                  return (
+                    <div
+                      key={key}
+                      className={`glass relative flex flex-col rounded-3xl p-6 ${
+                        featured ? "ring-primary/60 ring-2" : ""
+                      }`}
+                    >
+                      {featured ? (
+                        <span className="bg-primary text-primary-foreground absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-semibold">
+                          Most popular
+                        </span>
+                      ) : null}
+                      <h3 className="font-semibold">{plan.label}</h3>
+                      <p className="text-muted-foreground mt-1 text-xs">{plan.blurb}</p>
+                      <p className="mt-4 text-3xl font-bold tracking-tight">
+                        ₹{plan.priceInr.toLocaleString("en-IN")}
+                        <span className="text-muted-foreground text-sm font-medium">/year</span>
+                      </p>
+                      <ul className="text-muted-foreground mt-5 flex flex-1 flex-col gap-2 text-sm">
+                        <li className="flex items-center gap-2">
+                          <Check className="text-primary size-3.5 shrink-0" />
+                          {Math.round(plan.quotaBytes / (1024 * 1024 * 1024))} GB storage
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="text-primary size-3.5 shrink-0" />
+                          Unlimited events
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="text-primary size-3.5 shrink-0" />
+                          Unlimited guest selfie searches
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="text-primary size-3.5 shrink-0" />
+                          Face matching on every photo
+                        </li>
+                      </ul>
+                      <Button
+                        asChild
+                        variant={featured ? "default" : "outline"}
+                        className="mt-6 w-full rounded-full"
+                      >
+                        <a href={SALES_CONTACT.whatsappUrl} target="_blank" rel="noreferrer">
+                          <MessageCircle className="size-4" />
+                          Talk to us
+                        </a>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="glass mt-6 flex flex-col items-center gap-3 rounded-3xl px-6 py-8 text-center">
+                <h3 className="text-lg font-semibold">Questions? Talk to a human.</h3>
+                <p className="text-muted-foreground max-w-md text-sm">
+                  We&apos;ll walk you through it and get your studio set up the same day.
+                </p>
+                <div className="mt-1 flex flex-wrap justify-center gap-2">
+                  <Button asChild className="rounded-full">
+                    <a href={SALES_CONTACT.whatsappUrl} target="_blank" rel="noreferrer">
+                      <MessageCircle className="size-4" />
+                      WhatsApp
+                    </a>
+                  </Button>
+                  <Button asChild variant="outline" className="rounded-full">
+                    <a href={SALES_CONTACT.telUrl}>
+                      <Phone className="size-4" />
+                      {SALES_CONTACT.display}
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="glass flex flex-col items-center gap-5 rounded-3xl px-6 py-14 text-center sm:py-20">
               <span className="bg-primary/10 text-primary grid size-12 place-items-center rounded-2xl">
                 <Zap className="size-5" />
@@ -185,7 +278,7 @@ export default async function HomePage() {
                 Deliver photos the way guests expect.
               </h2>
               <p className="text-muted-foreground max-w-md text-sm sm:text-base">
-                Set up your studio workspace in under a minute — free while in beta.
+                Set up your studio in under a minute. Free for {TRIAL_DAYS} days, no card needed.
               </p>
               <Button
                 asChild
@@ -210,13 +303,24 @@ export default async function HomePage() {
             </span>
             © {new Date().getFullYear()} PhotoDost
           </div>
-          <a
-            href="https://github.com"
-            className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors"
-          >
-            <Github className="size-3.5" />
-            View source
-          </a>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <a
+              href={SALES_CONTACT.whatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors"
+            >
+              <MessageCircle className="size-3.5" />
+              WhatsApp us
+            </a>
+            <a
+              href={SALES_CONTACT.telUrl}
+              className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors"
+            >
+              <Phone className="size-3.5" />
+              {SALES_CONTACT.display}
+            </a>
+          </div>
         </div>
       </footer>
     </div>

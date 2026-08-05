@@ -74,6 +74,34 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  // --- better-auth `username` plugin ---
+  // Login identifier for accounts the admin provisions after taking payment in
+  // person. Stored lowercase (the plugin normalizes on its own routes, but
+  // /admin/create-user bypasses those hooks, so the admin action normalizes
+  // before writing). The unique index is what actually prevents collisions.
+  username: text("username").unique(),
+  displayUsername: text("display_username"),
+  // --- better-auth `admin` plugin ---
+  // Enabled solely so server-side `auth.api.createUser` is available: it is the
+  // one creation path with a server-side bypass, and `disableSignUp` blocks
+  // `signUpEmail` even when called internally. No user is given the admin role —
+  // the admin area authenticates separately against ADMIN_* env credentials.
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires", { withTimezone: true }),
+  // --- provisioning handoff ---
+  // What the admin sold, parked on the user until they finish onboarding.
+  //
+  // The workspace carries the plan and its expiry, but the workspace isn't
+  // created until the customer names their studio on first sign-in. So the
+  // purchase is recorded here at provisioning time and `createWorkspace` moves
+  // it onto the workspace, clearing these. The clock starts when they paid, not
+  // when they first log in.
+  //
+  // Null for Google self-serve signups — those get the 7-day free trial.
+  provisionedPlan: plan("provisioned_plan"),
+  provisionedUntil: timestamp("provisioned_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -89,6 +117,9 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // Required by the better-auth `admin` plugin's schema. We never impersonate,
+    // but the column has to exist for the plugin to load.
+    impersonatedBy: text("impersonated_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -150,8 +181,16 @@ export const verification = pgTable(
 // quotas (see `effectiveQuotas` in apps/web/src/lib/storage.ts).
 const FREE_QUOTA_BYTES = 500 * 1024 * 1024; // 500 MB
 const FREE_EVENT_QUOTA = 1;
-/** Length of the free trial a new workspace gets, in days. */
+/** Length of the free trial a self-serve (Google) signup gets, in days. */
 export const TRIAL_DAYS = 7;
+
+/**
+ * How long an admin-provisioned paid account lasts. Payment is taken in person
+ * (cash or UPI) and the account is created by hand, so this is the whole
+ * subscription term — there is no gateway and nothing auto-renews. The clock
+ * starts when the admin creates the account, i.e. when the customer paid.
+ */
+export const PROVISIONED_DAYS = 365;
 
 /**
  * How long photos survive after access ends — a cancelled subscription's paid

@@ -4,7 +4,6 @@ import { count, eq, sql } from "drizzle-orm";
 import { TRIAL_DAYS } from "@photodost/db";
 import { db, schema } from "./db";
 import { env } from "./env";
-import { billingReady } from "./billing-config";
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
@@ -111,19 +110,22 @@ export function quotaForPlan(plan: Plan): number {
 }
 
 // ---------------------------------------------------------------------------
-// Beta mode. Until billing is live, every workspace runs on a generous Beta
-// plan: usage is still tracked so the meters are real, but the caps are high
-// enough that nothing blocks testing.
+// Quota enforcement
 //
-// Note this keys off `billingReady()`, not the raw BILLING_ENABLED flag —
-// enforcing per-plan quotas while Cashfree is unconfigured would leave a
-// workspace capped with no way to upgrade, so a misconfigured deploy stays in
-// Beta rather than locking its own users out.
+// Quotas come from the workspace's own plan columns, always. There is no
+// payment gateway in V1 — plans are sold in person and provisioned by the admin
+// — so there is nothing to gate enforcement on.
+//
+// This used to key off `billingReady()`, which meant "no gateway configured"
+// silently granted every workspace a 100 GB Beta allowance. Under the current
+// model that would make an admin-assigned plan decorative: someone sold a 25 GB
+// plan would quietly get 100 GB.
+//
+// The original reasoning for the interlock — never cap a workspace that has no
+// way to upgrade — still holds, but the upgrade path is now a phone call rather
+// than a checkout page, so it's always available.
 // ---------------------------------------------------------------------------
 export const BILLING_ENABLED = env.BILLING_ENABLED;
-
-/** Beta allowance: unlimited events (null), 100 GB of storage. */
-const BETA_QUOTAS = { eventQuota: null, storageQuotaBytes: 100 * GB } as const;
 
 export interface EffectiveQuotas {
   /** Null means unlimited. */
@@ -132,15 +134,14 @@ export interface EffectiveQuotas {
 }
 
 /**
- * The quotas actually enforced for a workspace right now. In Beta this is the
- * generous shared allowance; once billing is live it's the workspace's own
- * plan-derived columns.
+ * The quotas actually enforced for a workspace right now: whatever its plan
+ * allots. The free tier's 500 MB / 1 event is the 7-day trial; every paid tier
+ * is storage-capped with unlimited events.
  */
 export function effectiveQuotas(ws: {
   eventQuota: number | null;
   storageQuotaBytes: number;
 }): EffectiveQuotas {
-  if (!billingReady()) return { ...BETA_QUOTAS };
   return { eventQuota: ws.eventQuota, storageQuotaBytes: ws.storageQuotaBytes };
 }
 
@@ -194,25 +195,37 @@ export async function checkQuota(
 }
 
 /**
- * Whether the workspace's billing state should block new writes, and which
- * state caused it. Returns null in Beta mode (nothing to enforce).
+ * Whether the workspace's state should block new writes, and what caused it.
  *
- * `trial_expired` is the free tier's 7-day window running out: the workspace
- * has never paid and its trial is over, so it can't create or upload until it
- * subscribes. `incomplete` is deliberately not blocking — that's a checkout
- * mid-flight, and the storage caps already bound what it can do.
+ * All four cases block creating events and uploading, and none of them touch
+ * reads: existing galleries, guest selfie search and downloads keep working. A
+ * photographer's clients shouldn't lose access to their wedding photos because
+ * the photographer's term lapsed — they aren't the ones who owe anything.
+ *
+ *   trial_expired — the free tier's 7-day window ran out
+ *   plan_expired  — an admin-provisioned term reached its end and wasn't renewed
+ *   canceled      — the admin cancelled the account
+ *   past_due      — legacy gateway state; retained so old rows behave sensibly
  */
 export function subscriptionBlock(ws: {
   plan: Plan;
   subscriptionStatus: (typeof schema.subscriptionStatus.enumValues)[number];
   trialEndsAt: Date | null;
-}): "past_due" | "canceled" | "trial_expired" | null {
-  if (!billingReady()) return null;
+  currentPeriodEnd: Date | null;
+}): "past_due" | "canceled" | "trial_expired" | "plan_expired" | null {
   if (ws.subscriptionStatus === "past_due") return "past_due";
   if (ws.subscriptionStatus === "canceled") return "canceled";
+
+  // A paid term that simply ran out. Checked before the trial branch because a
+  // lapsed paid account keeps `plan` set, and its `trialEndsAt` is null anyway.
+  if (ws.plan !== "free" && ws.currentPeriodEnd && ws.currentPeriodEnd.getTime() <= Date.now()) {
+    return "plan_expired";
+  }
+
   if (ws.plan === "free" && ws.trialEndsAt && ws.trialEndsAt.getTime() <= Date.now()) {
     return "trial_expired";
   }
+
   return null;
 }
 
@@ -323,14 +336,16 @@ export function quotaExceededResponse(usage: Usage, requestedBytes: number): Nex
  * card expired.
  */
 export function subscriptionLapsedResponse(
-  status: "past_due" | "canceled" | "trial_expired",
+  status: "past_due" | "canceled" | "trial_expired" | "plan_expired",
 ): NextResponse {
   const message =
-    status === "past_due"
-      ? "A payment on your subscription failed. Update it to keep uploading — your existing galleries stay live."
-      : status === "trial_expired"
-        ? `Your ${TRIAL_DAYS}-day free trial has ended. Choose a plan to create events and upload again — what you've already shared stays live.`
-        : "Your subscription has ended. Renew to create events and upload again — your existing galleries stay live.";
+    status === "trial_expired"
+      ? `Your ${TRIAL_DAYS}-day free trial has ended. Contact us to choose a plan — what you've already shared stays live for your guests.`
+      : status === "plan_expired"
+        ? "Your plan has ended. Contact us to renew and start uploading again — your existing galleries stay live for your guests."
+        : status === "past_due"
+          ? "There's a problem with your plan. Contact us to sort it out — your existing galleries stay live."
+          : "Your account has been closed. Contact us to reactivate it — your existing galleries stay live for your guests.";
 
   return NextResponse.json(
     {
@@ -348,5 +363,8 @@ export function subscriptionLapsedResponse(
 export function formatBytes(bytes: number): string {
   if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
   if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+  // Empty is genuinely zero. The floor below exists so a small-but-real file
+  // never reads as "0 KB", but an untouched account should say 0, not 1 KB.
+  if (bytes <= 0) return "0 KB";
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
