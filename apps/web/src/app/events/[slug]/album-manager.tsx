@@ -135,7 +135,7 @@ export function AlbumManager({
                 body: file,
               });
               if (!put.ok) throw new Error(`HTTP ${put.status}`);
-            } catch (err) {
+            } catch {
               failures.push(file.name);
             } finally {
               done += 1;
@@ -182,9 +182,10 @@ export function AlbumManager({
       } finally {
         setBusy(null);
         setProgress(null);
-        coverInput.current && (coverInput.current.value = "");
-        spreadInput.current && (spreadInput.current.value = "");
-        backInput.current && (backInput.current.value = "");
+        // Clear the pickers so re-selecting the same file still fires onChange.
+        for (const ref of [coverInput, spreadInput, backInput]) {
+          if (ref.current) ref.current.value = "";
+        }
       }
     },
     [slug],

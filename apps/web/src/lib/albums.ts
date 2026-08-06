@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, eq, max } from "drizzle-orm";
 import { db, schema } from "./db";
 import { publicUrlFor } from "./s3";
 
@@ -158,20 +158,47 @@ export async function getPublishedAlbumByShareToken(token: string): Promise<{
   return { eventName: event.name, accentColor: ws?.accentColor ?? null, album };
 }
 
-/** Whether a guest CTA should be shown for this event. */
-export async function hasPublishedAlbum(eventId: string): Promise<boolean> {
+/** Just enough about a published album to tease it on the guest gallery. */
+export interface AlbumTeaser {
+  /** Front cover if there is one, else the first spread — always something real. */
+  previewUrl: string | null;
+  previewWidth: number | null;
+  previewHeight: number | null;
+  spreadCount: number;
+}
+
+/**
+ * The album teaser for a guest, or null when there is nothing to show.
+ *
+ * Same publish rules as {@link getPublishedAlbumByShareToken} — an unpublished
+ * or empty album must not advertise itself — but this only reads what the
+ * invite needs, so the gallery doesn't pay for every page row.
+ */
+export async function getAlbumTeaser(eventId: string): Promise<AlbumTeaser | null> {
   const [row] = await db
-    .select({ publishedAt: schema.albums.publishedAt, id: schema.albums.id })
+    .select({ id: schema.albums.id, publishedAt: schema.albums.publishedAt })
     .from(schema.albums)
     .where(eq(schema.albums.eventId, eventId))
     .limit(1);
-  if (!row?.publishedAt) return false;
+  if (!row?.publishedAt) return null;
 
-  const [page] = await db
-    .select({ id: schema.albumPages.id })
+  const pages = await db
+    .select({
+      kind: schema.albumPages.kind,
+      objectKey: schema.albumPages.objectKey,
+      width: schema.albumPages.width,
+      height: schema.albumPages.height,
+    })
     .from(schema.albumPages)
     .where(eq(schema.albumPages.albumId, row.id))
-    .orderBy(desc(schema.albumPages.createdAt))
-    .limit(1);
-  return Boolean(page);
+    .orderBy(asc(schema.albumPages.position), asc(schema.albumPages.createdAt));
+  if (pages.length === 0) return null;
+
+  const preview = pages.find((p) => p.kind === "cover") ?? pages.find((p) => p.kind === "spread");
+  return {
+    previewUrl: preview ? publicUrlFor(preview.objectKey) : null,
+    previewWidth: preview?.width ?? null,
+    previewHeight: preview?.height ?? null,
+    spreadCount: pages.filter((p) => p.kind === "spread").length,
+  };
 }

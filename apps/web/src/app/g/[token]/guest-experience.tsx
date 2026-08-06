@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
+  BookOpen,
   Camera,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AlbumInvite, type AlbumInviteData } from "./album-invite";
 
 interface Photo {
   id: string;
@@ -42,6 +45,8 @@ interface Props {
   eventDate: string | null;
   eventDescription: string | null;
   accentColor?: string | null;
+  /** Null when this event has no published album. */
+  album?: AlbumInviteData | null;
 }
 
 type Stage = "intro" | "camera" | "captured" | "searching" | "results";
@@ -52,6 +57,7 @@ export function GuestExperience({
   eventDate,
   eventDescription,
   accentColor,
+  album = null,
 }: Props) {
   const [stage, setStage] = useState<Stage>("intro");
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +76,10 @@ export function GuestExperience({
 
   return (
     <div className="bg-background relative min-h-dvh" style={accentStyle}>
-      <Header eventName={eventName} eventDate={eventDate} />
+      <Header eventName={eventName} eventDate={eventDate} albumHref={album?.href ?? null} />
+
+      {/* Mounted once so it can't re-open on every stage change. */}
+      {album ? <AlbumInvite album={album} suppressed={stage !== "intro"} /> : null}
 
       {stage === "intro" ? (
         <Intro
@@ -175,7 +184,15 @@ export function GuestExperience({
   );
 }
 
-function Header({ eventName, eventDate }: { eventName: string; eventDate: string | null }) {
+function Header({
+  eventName,
+  eventDate,
+  albumHref,
+}: {
+  eventName: string;
+  eventDate: string | null;
+  albumHref: string | null;
+}) {
   return (
     <header className="safe-top glass sticky top-0 z-30">
       <div className="mx-auto flex h-14 max-w-2xl items-center gap-2.5 px-4">
@@ -194,6 +211,17 @@ function Header({ eventName, eventDate }: { eventName: string; eventDate: string
             </div>
           ) : null}
         </div>
+
+        {/* The durable way to the album — the invite popup is dismissible, this isn't. */}
+        {albumHref ? (
+          <Link
+            href={albumHref}
+            className="border-border/70 bg-background/60 hover:border-primary/50 hover:text-primary ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+          >
+            <BookOpen className="size-3.5" />
+            Album
+          </Link>
+        ) : null}
       </div>
     </header>
   );
