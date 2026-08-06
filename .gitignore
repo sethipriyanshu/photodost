@@ -57,3 +57,6 @@ coverage/
 .cache/
 tmp/
 *.tmp
+
+# local test fixtures (album spreads used for development)
+demoalbum/

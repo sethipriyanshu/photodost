@@ -5,6 +5,8 @@ import { ExternalLink, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site-header";
 import { getEventBySlug, getVariantKeyMap, listEventAssets } from "@/lib/events";
+import { getAlbumForEvent } from "@/lib/albums";
+import { AlbumManager, type AlbumView } from "./album-manager";
 import { requireWorkspace } from "@/lib/session";
 import { env } from "@/lib/env";
 import { qrDataUrl } from "@/lib/qr";
@@ -31,6 +33,19 @@ export default async function EventPage({ params }: PageProps) {
   if (!event) notFound();
 
   const assets = await listEventAssets(event.id);
+  const album = await getAlbumForEvent(event.id);
+
+  // Dates and bigints don't cross the server/client boundary as-is.
+  const albumView: AlbumView | null = album
+    ? {
+        id: album.id,
+        publishedAt: album.publishedAt?.toISOString() ?? null,
+        cover: album.cover ? { ...album.cover, bytes: Number(album.cover.bytes) } : null,
+        back: album.back ? { ...album.back, bytes: Number(album.back.bytes) } : null,
+        spreads: album.spreads.map((s) => ({ ...s, bytes: Number(s.bytes) })),
+        totalBytes: album.totalBytes,
+      }
+    : null;
   const variantMap = await getVariantKeyMap(assets.map((a) => a.id));
   const guestUrl = `${env.APP_URL.replace(/\/$/, "")}/g/${event.shareToken}`;
   const qr = await qrDataUrl(guestUrl);
@@ -93,6 +108,8 @@ export default async function EventPage({ params }: PageProps) {
             };
           })}
         />
+
+        <AlbumManager slug={slug} guestUrl={guestUrl} initialAlbum={albumView} />
 
         {workspace.photosPurgedAt && assets.length === 0 ? (
           <p className="border-border bg-muted/40 text-muted-foreground mt-10 rounded-xl border p-4 text-xs">

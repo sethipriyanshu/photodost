@@ -123,6 +123,13 @@ function ext(e: string): string {
 export const keys = {
   original: (workspaceId: string, eventId: string, assetId: string, e: string) =>
     `w/${workspaceId}/events/${eventId}/original/${assetId}${ext(e)}`,
+  /**
+   * Flipbook album pages. Kept under the event but in their own prefix so an
+   * album can be wiped without touching the event's shot coverage, and so the
+   * retention purge can tell the two apart.
+   */
+  albumPage: (workspaceId: string, eventId: string, pageId: string, e: string) =>
+    `w/${workspaceId}/events/${eventId}/album/${pageId}${ext(e)}`,
 };
 
 // Only browser-displayable formats are accepted. Browsers (other than Safari)
