@@ -16,7 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { listEvents } from "@/lib/events";
 import { getSessionWorkspace } from "@/lib/session";
 import { SALES_CONTACT } from "@/lib/contact";
-import { PAID_PLANS, PLANS, TRIAL_DAYS } from "@/lib/storage";
+import { PAID_PLANS, PLANS } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -188,8 +188,8 @@ export default async function HomePage() {
                   Simple yearly pricing
                 </h2>
                 <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm sm:text-base">
-                  Start with a free {TRIAL_DAYS}-day trial. Paid plans are capped by storage only —
-                  run as many events as you like.
+                  Capped by storage only — run as many events as you like. Get in touch and
+                  we&apos;ll set your studio up the same day.
                 </p>
               </div>
 
@@ -278,18 +278,26 @@ export default async function HomePage() {
                 Deliver photos the way guests expect.
               </h2>
               <p className="text-muted-foreground max-w-md text-sm sm:text-base">
-                Set up your studio in under a minute. Free for {TRIAL_DAYS} days, no card needed.
+                Message us and we&apos;ll have your studio running today.
               </p>
-              <Button
-                asChild
-                size="lg"
-                className="shadow-primary/30 h-13 rounded-full px-8 shadow-lg"
-              >
-                <Link href="/sign-in">
-                  Get started
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  asChild
+                  size="lg"
+                  className="shadow-primary/30 h-13 rounded-full px-8 shadow-lg"
+                >
+                  <a href={SALES_CONTACT.whatsappUrl} target="_blank" rel="noreferrer">
+                    <MessageCircle className="size-4" />
+                    Get started on WhatsApp
+                  </a>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="h-13 rounded-full px-8">
+                  <a href={SALES_CONTACT.telUrl}>
+                    <Phone className="size-4" />
+                    {SALES_CONTACT.display}
+                  </a>
+                </Button>
+              </div>
             </div>
           </section>
         )}
