@@ -29,14 +29,16 @@ Enforced at two points: **event creation** (free trial only) and **upload presig
 
 **Storage is the only lever.** It's the one cost that scales per customer, so it's the only thing a plan caps; event count is unlimited on every paid tier. Config-as-code in `apps/web/src/lib/storage.ts` (`PLANS`).
 
-| Plan | Storage | Events | Annual |
-|---|---|---|---|
-| **Free** | 500 MB | 1 | ₹0 — 7-day trial |
-| **Starter** | 25 GB | unlimited | ₹999 |
-| **Pro** | 50 GB | unlimited | ₹1,399 |
-| **Studio** | 100 GB | unlimited | ₹1,999 |
+| Plan | Storage | Events | Annual | Storage cost/yr | Margin |
+|---|---|---|---|---|---|
+| **Free** | 500 MB | 1 | ₹0 — 7-day trial | ~₹4 | — |
+| **Starter** | 10 GB | unlimited | ₹999 | ₹81 | 90% |
+| **Pro** | 50 GB | unlimited | ₹2,499 | ₹404 | 81% |
+| **Studio** | 100 GB | unlimited | ₹3,999 | ₹807 | 76% |
 
-> Reference: a DSLR JPEG is ~6–10 MB, so a 1,500-photo wedding ≈ 12 GB. Starter ≈ ~2 weddings; Studio ≈ ~8.
+> Reference: a DSLR JPEG is ~6–10 MB, so a 1,500-photo wedding ≈ 12 GB. **Starter does not fit one full wedding** — it is sized for a single smaller shoot, with the upgrade or a storage add-on as the path beyond that. Pro ≈ 4 weddings, Studio ≈ 8.
+
+Margins assume the customer fills the quota, ~10% variant overhead, and GST-inclusive prices. Break-even against Railway's ₹1,843/month is roughly **14 customers** on an even mix.
 
 **Unit economics — needs attention.** At R2's $0.015/GB-month (~₹15.8/GB-year) the Studio tier costs ~₹1,584/yr in storage against ₹1,999 of revenue, and GST-inclusive pricing plus the unbilled `asset_variants` overhead takes that gross margin to roughly zero. Two open items follow from this:
 

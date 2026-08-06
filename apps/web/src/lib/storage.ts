@@ -56,22 +56,22 @@ export const PLANS: Record<Plan, PlanDefinition> = {
   starter: {
     label: "Starter",
     eventQuota: null,
-    quotaBytes: 25 * GB,
+    quotaBytes: 10 * GB,
     priceInr: 999,
-    blurb: "For photographers shooting a few events a year.",
+    blurb: "For a single event or a smaller shoot.",
   },
   pro: {
     label: "Pro",
     eventQuota: null,
     quotaBytes: 50 * GB,
-    priceInr: 1399,
+    priceInr: 2499,
     blurb: "For a working studio with a steady season.",
   },
   business: {
     label: "Studio",
     eventQuota: null,
     quotaBytes: 100 * GB,
-    priceInr: 1999,
+    priceInr: 3999,
     blurb: "For teams running events every week.",
   },
 };

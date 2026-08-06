@@ -15,7 +15,7 @@ One Next.js app serving an authenticated **photographer dashboard** plus a publi
 - **Share a QR** → guests open `/g/[token]`, take/upload a selfie → largest face embedded → pgvector cosine search returns only the photos that guest appears in (threshold 0.55, capped at 200). Falls back to "show all" if ML is down or no face is found.
 - `guest_searches` logs hashed IP/UA + timing for rate-limiting/abuse signals.
 
-**Subscriptions (INR):** every workspace starts on a **7-day free trial** (500 MB, 1 event), then buys an **annual** plan capped only by **total storage** — 25 GB ₹999, 50 GB ₹1,399, 100 GB ₹1,999 — via Cashfree Subscriptions (UPI Autopay / eNACH / cards) on `/app/billing`. Events are unlimited on paid tiers because storage is the only cost that scales per customer. Everything is free/unlimited to test until billing is switched on (`BILLING_ENABLED` flag) — and the app refuses to enforce quotas unless Cashfree is fully configured, so it can't cap a workspace that has no way to upgrade. Setup runbook: **[`docs/BILLING.md`](./docs/BILLING.md)**.
+**Subscriptions (INR):** every workspace starts on a **7-day free trial** (500 MB, 1 event), then buys an **annual** plan capped only by **total storage** — 10 GB ₹999, 50 GB ₹2,499, 100 GB ₹3,999 — via Cashfree Subscriptions (UPI Autopay / eNACH / cards) on `/app/billing`. Events are unlimited on paid tiers because storage is the only cost that scales per customer. Everything is free/unlimited to test until billing is switched on (`BILLING_ENABLED` flag) — and the app refuses to enforce quotas unless Cashfree is fully configured, so it can't cap a workspace that has no way to upgrade. Setup runbook: **[`docs/BILLING.md`](./docs/BILLING.md)**.
 
 ---
 
