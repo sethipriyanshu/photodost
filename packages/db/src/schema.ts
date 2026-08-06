@@ -429,6 +429,73 @@ export const faceEmbeddingsHnswIndexSql = sql`
 // us answer "where did the space go?" without guessing. Positive delta =
 // added bytes (upload), negative = freed (delete).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Flipbook albums.
+//
+// A curated, designed album — not the event's shot coverage. Photographers
+// export finished layouts from album software (Album DS, Photoshop) and upload
+// them here: one front cover, a run of double-page spreads, one back cover.
+// Guests reach it from the QR gallery and read it as a page-turning book.
+//
+// Deliberately separate from `assets`: those are individually face-matched and
+// searchable, whereas album pages are a fixed sequence nobody searches.
+// ---------------------------------------------------------------------------
+
+/**
+ * `spread` is a single wide image covering two facing pages, which is what album
+ * software exports. The viewer splits it down the middle at render time rather
+ * than us cutting the file, so the original stays intact and re-exporting a
+ * layout means re-uploading one file.
+ */
+export const albumPageKind = pgEnum("album_page_kind", ["cover", "spread", "back"]);
+
+export const albums = pgTable(
+  "albums",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    // Guests only ever see a published album. Without this, a photographer
+    // uploading twenty spreads would be showing a half-built book the whole time.
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    // One album per event.
+    eventUnique: uniqueIndex("albums_event_unique").on(t.eventId),
+  }),
+);
+
+export const albumPages = pgTable(
+  "album_pages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    kind: albumPageKind("kind").notNull(),
+    /**
+     * Ordering within the book. Cover and back both sit at 0 — they're
+     * identified by `kind`, and the unique index below is what stops a second
+     * cover being added. Spreads run 1..N.
+     */
+    position: integer("position").default(0).notNull(),
+    objectKey: text("object_key").notNull(),
+    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    // Enforces one cover and one back per album, and no duplicate spread
+    // positions, in a single index.
+    slotUnique: uniqueIndex("album_pages_slot_unique").on(t.albumId, t.kind, t.position),
+    albumPositionIdx: index("album_pages_album_position_idx").on(t.albumId, t.position),
+  }),
+);
+
 export const storageLedgerReason = pgEnum("storage_ledger_reason", [
   "asset_upload",
   "asset_delete",
@@ -437,6 +504,11 @@ export const storageLedgerReason = pgEnum("storage_ledger_reason", [
   // `asset_delete` (a deliberate user action) so the audit trail can tell "the
   // photographer removed this" from "we deleted it because the plan lapsed".
   "retention_purge",
+  // Flipbook album pages. Tracked separately from event photos because they are
+  // a different artefact — a designed album rather than shot coverage — and
+  // they are typically far larger per file.
+  "album_upload",
+  "album_delete",
 ]);
 
 export const storageLedger = pgTable(
