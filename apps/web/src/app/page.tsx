@@ -85,7 +85,11 @@ export default async function HomePage() {
                   className="shadow-primary/30 h-13 rounded-full px-8 shadow-lg"
                 >
                   <Link href={signedIn ? "/events/new" : "/sign-in"}>
-                    {signedIn ? "Create an event" : "Start free"}
+                    {/* Not "Start free" — there is no self-serve signup, so that
+                        promised something a visitor can't do. Accounts are
+                        provisioned by the admin; this button is for people who
+                        already have credentials. */}
+                    {signedIn ? "Create an event" : "Login now"}
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>
