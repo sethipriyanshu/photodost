@@ -4,7 +4,14 @@ import { ArrowLeft, Check, MessageCircle, Phone } from "lucide-react";
 import { requireWorkspace } from "@/lib/session";
 import { countWorkspaceEvents } from "@/lib/events";
 import { SALES_CONTACT } from "@/lib/contact";
-import { PAID_PLANS, PLANS, TRIAL_DAYS, effectiveQuotas, formatBytes } from "@/lib/storage";
+import {
+  PAID_PLANS,
+  PLANS,
+  TRIAL_DAYS,
+  effectiveQuotas,
+  formatBytes,
+  planFeatures,
+} from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Your plan" };
@@ -162,18 +169,12 @@ export default async function BillingPage() {
                   <span className="text-muted-foreground text-sm font-medium">/yr</span>
                 </p>
                 <ul className="text-muted-foreground mt-4 space-y-1.5 text-sm">
-                  <li className="flex items-center gap-2">
-                    <Check className="text-primary size-3.5" />
-                    {Math.round(p.quotaBytes / GB)} GB storage
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="text-primary size-3.5" />
-                    Unlimited events
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="text-primary size-3.5" />
-                    Unlimited guest searches
-                  </li>
+                  {planFeatures(key).map((feature) => (
+                    <li key={feature} className="flex items-center gap-2">
+                      <Check className="text-primary size-3.5 shrink-0" />
+                      {feature}
+                    </li>
+                  ))}
                 </ul>
               </div>
             );

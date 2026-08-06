@@ -77,6 +77,38 @@ export const PLANS: Record<Plan, PlanDefinition> = {
 };
 
 /**
+ * The selling points shown on a plan card.
+ *
+ * Single source of truth because two pages render these — the public landing
+ * page and `/app/billing` — and a customer seeing fewer features than the
+ * marketing page promised is a bad way to find out they've drifted.
+ *
+ * Ordered so the concrete, verifiable things come first and the service-level
+ * promises last.
+ */
+export function planFeatures(plan: PaidPlan): string[] {
+  const gb = Math.round(PLANS[plan].quotaBytes / (1024 * 1024 * 1024));
+  // PAID_PLANS is ordered cheapest first; index 0 is the entry tier.
+  const tier = PAID_PLANS.indexOf(plan);
+
+  return [
+    `${gb} GB storage`,
+    "Unlimited events",
+    "Unlimited albums",
+    "Face matching on every photo",
+    "Unlimited guest selfie searches",
+    "QR code sharing",
+    tier === 0 ? "Buy additional storage anytime" : "Additional storage at discounted rates",
+    tier === 0
+      ? "Chat & email support"
+      : tier === 1
+        ? "Priority chat support"
+        : "Priority 24/7 chat & call support",
+    ...(tier === 0 ? [] : ["Enhanced cloud backup"]),
+  ];
+}
+
+/**
  * Catalog key stored on the workspace row and echoed in Cashfree's
  * `subscription_tags`, e.g. "pro". Now that billing is annual-only this is just
  * the plan name, but it stays a distinct function because it is a wire format:

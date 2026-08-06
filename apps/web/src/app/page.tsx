@@ -16,7 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { listEvents } from "@/lib/events";
 import { getSessionWorkspace } from "@/lib/session";
 import { SALES_CONTACT } from "@/lib/contact";
-import { PAID_PLANS, PLANS } from "@/lib/storage";
+import { PAID_PLANS, PLANS, planFeatures } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -194,17 +194,9 @@ export default async function HomePage() {
               </div>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                {PAID_PLANS.map((key, index) => {
+                {PAID_PLANS.map((key) => {
                   const plan = PLANS[key];
                   const featured = key === "pro";
-                  // PAID_PLANS is ordered cheapest first, so index 0 is the entry
-                  // tier. Keyed off position rather than the name so inserting a
-                  // tier later doesn't silently leave two plans claiming to be
-                  // the cheapest.
-                  const storageAddOn =
-                    index === 0
-                      ? "Buy additional storage anytime"
-                      : "Additional storage at discounted rates";
                   return (
                     <div
                       key={key}
@@ -224,26 +216,12 @@ export default async function HomePage() {
                         <span className="text-muted-foreground text-sm font-medium">/year</span>
                       </p>
                       <ul className="text-muted-foreground mt-5 flex flex-1 flex-col gap-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <Check className="text-primary size-3.5 shrink-0" />
-                          {Math.round(plan.quotaBytes / (1024 * 1024 * 1024))} GB storage
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="text-primary size-3.5 shrink-0" />
-                          Unlimited events
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="text-primary size-3.5 shrink-0" />
-                          Unlimited guest selfie searches
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="text-primary size-3.5 shrink-0" />
-                          Face matching on every photo
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="text-primary size-3.5 shrink-0" />
-                          {storageAddOn}
-                        </li>
+                        {planFeatures(key).map((feature) => (
+                          <li key={feature} className="flex items-center gap-2">
+                            <Check className="text-primary size-3.5 shrink-0" />
+                            {feature}
+                          </li>
+                        ))}
                       </ul>
                       <Button
                         asChild
