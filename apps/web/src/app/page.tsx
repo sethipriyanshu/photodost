@@ -194,9 +194,17 @@ export default async function HomePage() {
               </div>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                {PAID_PLANS.map((key) => {
+                {PAID_PLANS.map((key, index) => {
                   const plan = PLANS[key];
                   const featured = key === "pro";
+                  // PAID_PLANS is ordered cheapest first, so index 0 is the entry
+                  // tier. Keyed off position rather than the name so inserting a
+                  // tier later doesn't silently leave two plans claiming to be
+                  // the cheapest.
+                  const storageAddOn =
+                    index === 0
+                      ? "Buy additional storage anytime"
+                      : "Additional storage at discounted rates";
                   return (
                     <div
                       key={key}
@@ -231,6 +239,10 @@ export default async function HomePage() {
                         <li className="flex items-center gap-2">
                           <Check className="text-primary size-3.5 shrink-0" />
                           Face matching on every photo
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="text-primary size-3.5 shrink-0" />
+                          {storageAddOn}
                         </li>
                       </ul>
                       <Button
