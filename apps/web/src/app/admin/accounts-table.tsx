@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, RotateCcw, XCircle } from "lucide-react";
+import { AlertTriangle, Check, Copy, KeyRound, Loader2, RotateCcw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cancelAccountAction, extendAccountAction } from "./actions";
+import { cancelAccountAction, extendAccountAction, resetPasswordAction } from "./actions";
 
 export interface AccountRow {
   userId: string;
@@ -81,6 +81,34 @@ function StatusPill({ row }: { row: AccountRow }) {
 
 export function AccountsTable({ rows }: { rows: AccountRow[] }) {
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [resetting, setResetting] = useState<string | null>(null);
+  // Shown once, then gone. Nothing recoverable is stored — passwords are one-way
+  // hashes, so this is the only moment the new one exists in readable form.
+  const [issued, setIssued] = useState<{ userId: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onReset(userId: string, username: string | null) {
+    setError(null);
+    setResetting(userId);
+    const result = await resetPasswordAction(userId);
+    setResetting(null);
+    if (result.ok) {
+      setIssued({ userId, password: result.password });
+      setCopied(false);
+    } else {
+      setError(`${username ?? "Account"}: ${result.message}`);
+    }
+  }
+
+  async function copyIssued(username: string | null) {
+    if (!issued) return;
+    await navigator.clipboard.writeText(
+      `PhotoDost sign-in\nUsername: ${username ?? ""}\nPassword: ${issued.password}`,
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   if (rows.length === 0) {
     return (
@@ -91,112 +119,177 @@ export function AccountsTable({ rows }: { rows: AccountRow[] }) {
   }
 
   return (
-    <div className="border-border overflow-x-auto rounded-2xl border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-muted-foreground text-xs">
-          <tr>
-            <th className="px-3 py-2 text-left font-medium">Account</th>
-            <th className="px-3 py-2 text-left font-medium">Plan</th>
-            <th className="px-3 py-2 text-left font-medium">Status</th>
-            <th className="px-3 py-2 text-right font-medium">Events</th>
-            <th className="px-3 py-2 text-right font-medium">Photos</th>
-            <th className="px-3 py-2 text-right font-medium">Storage</th>
-            <th className="px-3 py-2 text-right font-medium">Guests</th>
-            <th className="px-3 py-2 text-left font-medium">Last active</th>
-            <th className="px-3 py-2 text-left font-medium">Ends</th>
-            <th className="px-3 py-2 text-right font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.userId} className="border-border border-t align-middle">
-              <td className="px-3 py-2.5">
-                <div className="font-medium">{row.studioName ?? "—"}</div>
-                <div className="text-muted-foreground font-mono text-xs">
-                  {row.username ?? "google sign-in"}
-                </div>
-              </td>
-              <td className="whitespace-nowrap px-3 py-2.5">{row.planLabel ?? "—"}</td>
-              <td className="px-3 py-2.5">
-                <StatusPill row={row} />
-              </td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{row.events}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{row.photos}</td>
-              <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
-                {row.storageUsed}
-                {row.storageQuota ? (
-                  <span className="text-muted-foreground"> / {row.storageQuota}</span>
-                ) : null}
-              </td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{row.guestSearches}</td>
-              <td className="text-muted-foreground whitespace-nowrap px-3 py-2.5">
-                {relative(row.lastActivityIso)}
-              </td>
-              <td className="whitespace-nowrap px-3 py-2.5">{fmtDate(row.endsAtIso)}</td>
-              <td className="px-3 py-2.5">
-                <div className="flex justify-end gap-1.5">
-                  <form action={extendAccountAction}>
-                    <input type="hidden" name="workspaceId" value={row.workspaceId ?? ""} />
-                    <input type="hidden" name="userId" value={row.userId} />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      title="Extend by 365 days from today"
-                    >
-                      <RotateCcw className="size-3.5" />
-                      Renew
-                    </Button>
-                  </form>
+    <div className="flex flex-col gap-3">
+      {issued ? (
+        <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-3 rounded-xl border p-4">
+          <KeyRound className="text-primary size-4 shrink-0" />
+          <div className="text-sm">
+            New password for{" "}
+            <span className="font-mono font-semibold">
+              {rows.find((r) => r.userId === issued.userId)?.username ?? "account"}
+            </span>
+            : <span className="font-mono text-base font-bold">{issued.password}</span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            onClick={() =>
+              copyIssued(rows.find((r) => r.userId === issued.userId)?.username ?? null)
+            }
+          >
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-full"
+            onClick={() => setIssued(null)}
+          >
+            Done
+          </Button>
+          <p className="text-muted-foreground w-full text-xs">
+            Give this to the customer now — it can&apos;t be shown again. Their existing sign-ins
+            keep working until they sign out.
+          </p>
+        </div>
+      ) : null}
 
-                  {row.workspaceId && row.status !== "canceled" ? (
-                    confirming === row.userId ? (
-                      <form action={cancelAccountAction} className="flex items-center gap-1.5">
-                        <input type="hidden" name="workspaceId" value={row.workspaceId} />
-                        <Button
-                          type="submit"
-                          variant="destructive"
-                          size="sm"
-                          className="rounded-full"
-                        >
-                          Confirm
-                        </Button>
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="border-border overflow-x-auto rounded-2xl border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-muted-foreground text-xs">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">Account</th>
+              <th className="px-3 py-2 text-left font-medium">Plan</th>
+              <th className="px-3 py-2 text-left font-medium">Status</th>
+              <th className="px-3 py-2 text-right font-medium">Events</th>
+              <th className="px-3 py-2 text-right font-medium">Photos</th>
+              <th className="px-3 py-2 text-right font-medium">Storage</th>
+              <th className="px-3 py-2 text-right font-medium">Guests</th>
+              <th className="px-3 py-2 text-left font-medium">Last active</th>
+              <th className="px-3 py-2 text-left font-medium">Ends</th>
+              <th className="px-3 py-2 text-right font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.userId} className="border-border border-t align-middle">
+                <td className="px-3 py-2.5">
+                  <div className="font-medium">{row.studioName ?? "—"}</div>
+                  <div className="text-muted-foreground font-mono text-xs">
+                    {row.username ?? "google sign-in"}
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5">{row.planLabel ?? "—"}</td>
+                <td className="px-3 py-2.5">
+                  <StatusPill row={row} />
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{row.events}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{row.photos}</td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                  {row.storageUsed}
+                  {row.storageQuota ? (
+                    <span className="text-muted-foreground"> / {row.storageQuota}</span>
+                  ) : null}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{row.guestSearches}</td>
+                <td className="text-muted-foreground whitespace-nowrap px-3 py-2.5">
+                  {relative(row.lastActivityIso)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5">{fmtDate(row.endsAtIso)}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex justify-end gap-1.5">
+                    <form action={extendAccountAction}>
+                      <input type="hidden" name="workspaceId" value={row.workspaceId ?? ""} />
+                      <input type="hidden" name="userId" value={row.userId} />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        title="Extend by 365 days from today"
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Renew
+                      </Button>
+                    </form>
+
+                    {row.username ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        title="Issue a new password and show it once"
+                        disabled={resetting === row.userId}
+                        onClick={() => onReset(row.userId, row.username)}
+                      >
+                        {resetting === row.userId ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <KeyRound className="size-3.5" />
+                        )}
+                        Reset
+                      </Button>
+                    ) : null}
+
+                    {row.workspaceId && row.status !== "canceled" ? (
+                      confirming === row.userId ? (
+                        <form action={cancelAccountAction} className="flex items-center gap-1.5">
+                          <input type="hidden" name="workspaceId" value={row.workspaceId} />
+                          <Button
+                            type="submit"
+                            variant="destructive"
+                            size="sm"
+                            className="rounded-full"
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => setConfirming(null)}
+                          >
+                            No
+                          </Button>
+                        </form>
+                      ) : (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="rounded-full"
-                          onClick={() => setConfirming(null)}
+                          className="text-destructive rounded-full"
+                          onClick={() => setConfirming(row.userId)}
                         >
-                          No
+                          <XCircle className="size-3.5" />
+                          Cancel
                         </Button>
-                      </form>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive rounded-full"
-                        onClick={() => setConfirming(row.userId)}
-                      >
-                        <XCircle className="size-3.5" />
-                        Cancel
-                      </Button>
-                    )
-                  ) : null}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                      )
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      <p className="text-muted-foreground border-border flex items-start gap-2 border-t px-3 py-2.5 text-xs">
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-        Cancelling blocks new events and uploads. Existing galleries and guest search keep working,
-        and photos become eligible for deletion after the retention period.
-      </p>
+        <p className="text-muted-foreground border-border flex items-start gap-2 border-t px-3 py-2.5 text-xs">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          Cancelling blocks new events and uploads. Existing galleries and guest search keep
+          working, and photos become eligible for deletion after the retention period.
+        </p>
+      </div>
     </div>
   );
 }

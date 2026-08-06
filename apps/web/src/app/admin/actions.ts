@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { eq } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { PROVISIONED_DAYS } from "@photodost/db";
 import { adminLogin, adminLogout, clientIp, isAdmin } from "@/lib/admin-auth";
+import { hashPassword } from "better-auth/crypto";
 import { auth, USERNAME_MAX, USERNAME_MIN, USERNAME_PATTERN } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { PAID_PLANS, PLANS } from "@/lib/storage";
@@ -233,6 +235,60 @@ export async function cancelAccountAction(formData: FormData): Promise<void> {
     .where(eq(schema.workspaces.id, workspaceId));
 
   revalidatePath("/admin");
+}
+
+/**
+ * Issue a new password for an account and return it once.
+ *
+ * There is no email, so there is no self-service reset: a customer who forgets
+ * their password has no way back in except this. Without it a forgotten password
+ * means abandoning the account and the events in it.
+ *
+ * The password is hashed and written directly rather than going through the
+ * admin plugin's `setUserPassword`, which reads `ctx.context.session.user.id`
+ * unconditionally and therefore throws when called server-side without a
+ * session — unlike `createUser`, it has no bypass. `hashPassword` from
+ * better-auth/crypto is the same primitive the library uses internally, so the
+ * stored hash is byte-for-byte what a normal sign-up would produce.
+ */
+export async function resetPasswordAction(
+  userId: string,
+): Promise<{ ok: true; password: string } | { ok: false; message: string }> {
+  if (!(await isAdmin())) return { ok: false, message: "Not signed in." };
+  if (!userId) return { ok: false, message: "No account selected." };
+
+  // Same alphabet as the create form: no look-alike characters, because this
+  // gets read aloud down a phone line.
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = randomBytes(10);
+  const password = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+
+  try {
+    const hash = await hashPassword(password);
+
+    // The credential lives on the account row for the email/password provider.
+    const updated = await db
+      .update(schema.account)
+      .set({ password: hash, updatedAt: new Date() })
+      .where(and(eq(schema.account.userId, userId), eq(schema.account.providerId, "credential")))
+      .returning({ id: schema.account.id });
+
+    if (updated.length === 0) {
+      // A Google-only account has no credential row to reset.
+      return {
+        ok: false,
+        message: "This account signs in with Google, so it has no password.",
+      };
+    }
+
+    // Existing sessions keep working after a reset — the customer isn't kicked
+    // out mid-upload just because a new password was issued.
+    revalidatePath("/admin");
+    return { ok: true, password };
+  } catch (err) {
+    console.error("[admin/resetPassword] failed", err);
+    return { ok: false, message: "Could not reset the password. Please try again." };
+  }
 }
 
 /** Plan options for the create form, priced from the catalog. */

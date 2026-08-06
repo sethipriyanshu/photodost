@@ -49,8 +49,25 @@ export function SignInForm({
     });
     setPending(false);
     if (error) {
-      // Never distinguish "no such user" from "wrong password".
-      toast.error("Incorrect username or password.");
+      // Bad credentials must stay indistinguishable from an unknown user — but
+      // only bad credentials. Collapsing *every* failure into "wrong password"
+      // hides outages and misconfiguration behind a message that sends people
+      // hunting for a typo that isn't there.
+      const credentialFailure =
+        error.code === "INVALID_USERNAME_OR_PASSWORD" ||
+        error.code === "INVALID_EMAIL_OR_PASSWORD" ||
+        error.status === 401;
+
+      if (credentialFailure) {
+        toast.error("Incorrect username or password.");
+      } else {
+        console.error("[sign-in] unexpected failure", error);
+        toast.error(
+          !error.status
+            ? "Couldn't reach the server. Check your connection and try again."
+            : `Sign-in failed (${error.status}). Please try again or contact us.`,
+        );
+      }
       return;
     }
     // Lands on /app, which redirects to /onboarding on first sign-in so they can
