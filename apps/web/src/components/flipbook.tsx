@@ -142,7 +142,18 @@ function SpineShade({ side }: { side: "left" | "right" }) {
   );
 }
 
-export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
+export function Flipbook({
+  pages,
+  onTurn,
+}: {
+  pages: FlipbookPage[];
+  /**
+   * Fires on every page turn, from inside the click/swipe/key handler itself —
+   * so callers may start audio here, which browsers only allow during a
+   * user gesture.
+   */
+  onTurn?: () => void;
+}) {
   const faces = useMemo(() => buildFaces(pages), [pages]);
   const aspect = useMemo(() => openBookAspect(pages), [pages]);
   const leafCount = faces.length / 2;
@@ -155,8 +166,14 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
   const canForward = turned < leafCount;
   const canBack = turned > 0;
 
-  const next = useCallback(() => setTurned((t) => Math.min(leafCount, t + 1)), [leafCount]);
-  const prev = useCallback(() => setTurned((t) => Math.max(0, t - 1)), []);
+  const next = useCallback(() => {
+    setTurned((t) => Math.min(leafCount, t + 1));
+    onTurn?.();
+  }, [leafCount, onTurn]);
+  const prev = useCallback(() => {
+    setTurned((t) => Math.max(0, t - 1));
+    onTurn?.();
+  }, [onTurn]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -187,6 +204,14 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
 
   if (faces.length === 0) return null;
 
+  // A closed book is one page wide, not two. Shifting the whole assembly by a
+  // quarter width centres the visible cover, and the shift animates alongside
+  // the first leaf turn — the book slides open the way a real one does. The
+  // cover sits on the right half; the back cover ends on the left.
+  const closedFront = turned === 0;
+  const closedBack = turned === leafCount;
+  const shift = closedFront ? "-25%" : closedBack ? "25%" : "0%";
+
   return (
     <div className="flex w-full flex-col items-center gap-4">
       <div
@@ -199,20 +224,30 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
       >
         {/* Shape comes from the uploaded spreads — see openBookAspect. */}
         <div
-          className="relative w-full"
-          style={{ aspectRatio: String(aspect), transformStyle: "preserve-3d" }}
+          className="relative w-full [transition:transform_700ms_cubic-bezier(0.22,0.61,0.36,1)]"
+          style={{
+            aspectRatio: String(aspect),
+            transformStyle: "preserve-3d",
+            transform: `translateX(${shift})`,
+          }}
         >
-          {/* The static verso: whatever is behind the leaf currently on the left. */}
-          <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden rounded-l-md bg-neutral-200 shadow-inner dark:bg-neutral-800">
-            {turned > 0 ? <FaceImage face={faces[2 * turned - 1]!} eager /> : null}
-            <SpineShade side="right" />
-          </div>
+          {/* The static verso: whatever is behind the leaf currently on the left.
+              Not rendered while the book is closed — a closed book has no open
+              left page, and the empty grey panel read as a bug. */}
+          {turned > 0 ? (
+            <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden rounded-l-md bg-neutral-200 shadow-inner dark:bg-neutral-800">
+              <FaceImage face={faces[2 * turned - 1]!} eager />
+              <SpineShade side="right" />
+            </div>
+          ) : null}
 
           {/* The static recto: what sits under the stack still to be turned. */}
-          <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden rounded-r-md bg-neutral-200 shadow-inner dark:bg-neutral-800">
-            {turned < leafCount ? <FaceImage face={faces[2 * turned]!} eager /> : null}
-            <SpineShade side="left" />
-          </div>
+          {turned < leafCount ? (
+            <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden rounded-r-md bg-neutral-200 shadow-inner dark:bg-neutral-800">
+              <FaceImage face={faces[2 * turned]!} eager />
+              <SpineShade side="left" />
+            </div>
+          ) : null}
 
           {/* The leaves themselves, hinged at the spine. */}
           {Array.from({ length: leafCount }, (_, i) => {
@@ -226,6 +261,14 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
             // would otherwise mount 120 full-size images at once.
             if (Math.abs(i - turned) > 2) return null;
 
+            // Inside preserve-3d, z-index doesn't order coplanar planes — the
+            // GPU z-fights and pages bleed through each other as ghosts. Give
+            // every leaf a real sub-pixel thickness instead, exactly like the
+            // stacked card pages of a physical album. translateZ comes after
+            // rotateY, so the axis flips with the leaf: negative is "toward the
+            // viewer" once turned.
+            const depth = isTurned ? -(i + 1) * 0.6 : (leafCount - i) * 0.6;
+
             return (
               <div
                 key={i}
@@ -233,7 +276,7 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
                 style={{
                   transformStyle: "preserve-3d",
                   transformOrigin: "left center",
-                  transform: `rotateY(${isTurned ? -180 : 0}deg)`,
+                  transform: `rotateY(${isTurned ? -180 : 0}deg) translateZ(${depth}px)`,
                   zIndex: z,
                 }}
               >
@@ -257,10 +300,13 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
             );
           })}
 
-          {/* Centre gutter: a thin dark seam reads as the binding. */}
+          {/* Centre gutter: a thin dark seam reads as the binding. Hidden while
+              closed — there is no fold on the face of a shut book. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-1/2 z-50 w-[3px] -translate-x-1/2"
+            className={`pointer-events-none absolute inset-y-0 left-1/2 z-50 w-[3px] -translate-x-1/2 transition-opacity duration-700 ${
+              closedFront || closedBack ? "opacity-0" : "opacity-100"
+            }`}
             style={{
               background:
                 "linear-gradient(to right, rgba(0,0,0,0.05), rgba(0,0,0,0.45), rgba(0,0,0,0.05))",
@@ -268,10 +314,12 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
           />
         </div>
 
-        {/* Contact shadow. Grounds the book instead of leaving it floating. */}
+        {/* Contact shadow. Grounds the book, and narrows when it closes. */}
         <div
           aria-hidden
-          className="mx-auto h-6 w-[85%] -translate-y-2 rounded-[50%] blur-xl"
+          className={`mx-auto h-6 -translate-y-2 rounded-[50%] blur-xl transition-all duration-700 ${
+            closedFront || closedBack ? "w-[44%]" : "w-[85%]"
+          }`}
           style={{ background: "rgba(0,0,0,0.35)" }}
         />
 
@@ -322,7 +370,10 @@ export function Flipbook({ pages }: { pages: FlipbookPage[] }) {
         {turned > 0 ? (
           <button
             type="button"
-            onClick={() => setTurned(0)}
+            onClick={() => {
+              setTurned(0);
+              onTurn?.();
+            }}
             className="text-muted-foreground hover:text-foreground ml-1 inline-flex items-center gap-1.5 text-xs transition"
           >
             <RotateCcw className="size-3.5" />

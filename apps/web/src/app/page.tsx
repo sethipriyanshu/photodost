@@ -12,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoAlbum } from "@/components/demo-album";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { listEvents } from "@/lib/events";
 import { getSessionWorkspace } from "@/lib/session";
@@ -64,7 +65,7 @@ export default async function HomePage() {
             <div className="flex flex-col items-start gap-6">
               <span className="glass text-muted-foreground inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium">
                 <Sparkles className="text-primary size-3.5" />
-                Face-recognition photo delivery for event photographers
+                For wedding &amp; event photographers
               </span>
 
               <h1 className="text-balance text-[2.6rem] font-bold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
@@ -74,8 +75,9 @@ export default async function HomePage() {
               </h1>
 
               <p className="text-muted-foreground max-w-xl text-pretty text-base leading-relaxed sm:text-lg">
-                Upload the event, share one QR. Guests take a single selfie and instantly see only
-                the photos they&apos;re in — no apps, no accounts, no endless scrolling.
+                Share one QR at the venue. Guests take a single selfie and instantly see only the
+                photos they&apos;re in — and flip through your designed album like the real book.
+                No apps, no accounts, no endless scrolling.
               </p>
 
               <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
@@ -101,14 +103,16 @@ export default async function HomePage() {
               </div>
 
               <ul className="text-muted-foreground mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs sm:text-sm">
-                {["One selfie, instant results", "Self-hosted AI", "Guests need no app"].map(
-                  (t) => (
-                    <li key={t} className="inline-flex items-center gap-1.5">
-                      <Check className="text-primary size-3.5" />
-                      {t}
-                    </li>
-                  ),
-                )}
+                {[
+                  "One selfie, instant results",
+                  "3D flipbook albums",
+                  "Guests need no app",
+                ].map((t) => (
+                  <li key={t} className="inline-flex items-center gap-1.5">
+                    <Check className="text-primary size-3.5" />
+                    {t}
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -120,7 +124,7 @@ export default async function HomePage() {
         </section>
 
         {/* How it works */}
-        <section className="mt-24 sm:mt-32">
+        <section className="mt-16 sm:mt-32">
           <div className="mx-auto max-w-xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Three steps. <span className="text-gradient">Zero friction.</span>
@@ -130,7 +134,7 @@ export default async function HomePage() {
             </p>
           </div>
 
-          <div className="reveal-group mt-10 grid gap-4 sm:grid-cols-3 sm:gap-5">
+          <div className="reveal-group mt-8 grid gap-3 sm:mt-10 sm:grid-cols-3 sm:gap-5">
             <StepCard
               icon={<Upload className="size-5" />}
               step="01"
@@ -141,7 +145,7 @@ export default async function HomePage() {
               icon={<QrCode className="size-5" />}
               step="02"
               title="Share one QR"
-              description="Print it at the venue or drop it in the group chat. One code covers the entire event."
+              description="Print it at the venue or drop it in the group chat. One code covers selfie search and the album."
             />
             <StepCard
               icon={<ScanFace className="size-5" />}
@@ -149,6 +153,27 @@ export default async function HomePage() {
               title="Guests selfie-search"
               description="One selfie returns every photo that guest appears in — and nothing else."
             />
+          </div>
+        </section>
+
+        {/* Flipbook album demo — a real album, flippable right here. */}
+        <section className="mt-16 sm:mt-32">
+          <div className="mx-auto max-w-xl text-center">
+            <span className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold tracking-wide">
+              NEW
+            </span>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+              Your album, as a <span className="text-gradient">3D flipbook.</span>
+            </h2>
+            <p className="text-muted-foreground mt-3 text-sm sm:text-base">
+              Upload your designed spreads and guests flip through the album on their phone,
+              cover to cover, from the same QR. Your layouts, untouched. Try it — this one is
+              real:
+            </p>
+          </div>
+
+          <div className="mt-8 sm:mt-10">
+            <DemoAlbum />
           </div>
         </section>
 
@@ -182,7 +207,7 @@ export default async function HomePage() {
           </section>
         ) : (
           /* Bottom CTA for logged-out visitors */
-          <section className="relative mt-24 overflow-hidden rounded-3xl sm:mt-32">
+          <section className="relative mt-16 overflow-hidden rounded-3xl sm:mt-32">
             <div className="aurora" aria-hidden />
             {/* Pricing. There is no checkout — plans are bought by talking to us,
                 so every card points at the same contact action. */}
@@ -400,19 +425,28 @@ function StepCard({
   description: string;
 }) {
   return (
-    <div className="border-border bg-card lift group relative overflow-hidden rounded-3xl border p-6 sm:p-7">
+    // One tall card per step reads fine on desktop, but three of them stacked
+    // fill two phone screens before the visitor reaches the album demo. On
+    // phones each step is a compact row instead.
+    <div className="border-border bg-card lift group relative flex gap-4 overflow-hidden rounded-2xl border p-4 sm:block sm:rounded-3xl sm:p-7">
       <div
         className="from-primary/10 absolute -right-16 -top-16 size-40 rounded-full bg-gradient-to-br to-transparent blur-2xl transition-opacity"
         aria-hidden
       />
-      <div className="flex items-center justify-between">
-        <div className="bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground grid size-11 place-items-center rounded-2xl transition-colors duration-300">
+      <div className="flex shrink-0 items-start sm:items-center sm:justify-between">
+        <div className="bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground grid size-10 place-items-center rounded-xl transition-colors duration-300 sm:size-11 sm:rounded-2xl">
           {icon}
         </div>
-        <span className="text-gradient text-3xl font-bold tabular-nums opacity-70">{step}</span>
+        <span className="text-gradient hidden text-3xl font-bold tabular-nums opacity-70 sm:block">
+          {step}
+        </span>
       </div>
-      <h3 className="mt-5 text-lg font-bold tracking-tight">{title}</h3>
-      <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{description}</p>
+      <div className="min-w-0">
+        <h3 className="text-base font-bold tracking-tight sm:mt-5 sm:text-lg">{title}</h3>
+        <p className="text-muted-foreground mt-1 text-sm leading-relaxed sm:mt-1.5">
+          {description}
+        </p>
+      </div>
     </div>
   );
 }
