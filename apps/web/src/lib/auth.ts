@@ -9,11 +9,14 @@ import { magicLinkEmail, sendEmail } from "./email";
 const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
 /**
- * Magic links are only offered when SMTP is actually configured. Showing the
- * option without a working mailer produces a button that silently does nothing,
- * which is worse than not offering it at all.
+ * Magic links are only offered when a real mail server is configured. Showing
+ * the option without a working mailer produces a form that silently does
+ * nothing, which is worse than not offering it at all.
+ *
+ * Note this uses SMTP_CONFIGURED, not SMTP_HOST: the latter defaults to
+ * "localhost" and so is always truthy.
  */
-export const magicLinkEnabled = Boolean(env.SMTP_HOST);
+export const magicLinkEnabled = env.SMTP_CONFIGURED;
 
 /**
  * Username rules, matching the plugin's own defaults. Exported so the sign-in

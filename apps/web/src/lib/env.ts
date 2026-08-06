@@ -29,6 +29,20 @@ export const env = {
 
   // ---- Email (magic links via Mailpit locally) ----
   SMTP_HOST: process.env.SMTP_HOST ?? "localhost",
+  /**
+   * Whether a real mail server is configured, as opposed to the localhost
+   * default above. Derived from the raw variable rather than SMTP_HOST, because
+   * that one always has a value — checking it would report "configured" on every
+   * deployment and offer a magic-link form that silently fails.
+   *
+   * Gates the magic-link sign-in option and, in the worker, whether retention
+   * warning emails can be sent at all.
+   */
+  SMTP_CONFIGURED: Boolean(
+    process.env.SMTP_HOST &&
+    process.env.SMTP_HOST !== "localhost" &&
+    process.env.SMTP_HOST !== "127.0.0.1",
+  ),
   SMTP_PORT: Number(process.env.SMTP_PORT ?? "1025"),
   SMTP_SECURE: optionalBool("SMTP_SECURE", false),
   SMTP_USER: process.env.SMTP_USER ?? "",

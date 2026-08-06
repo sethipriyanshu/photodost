@@ -5,6 +5,7 @@ import { Camera } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { magicLinkEnabled } from "@/lib/auth";
 import { SALES_CONTACT } from "@/lib/contact";
+import { TRIAL_DAYS } from "@/lib/storage";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -38,7 +39,11 @@ export default async function SignInPage() {
             Sign in with the username and password you were given.
           </p>
           <div className="mt-6">
-            <SignInForm googleEnabled={googleEnabled} magicLinkEnabled={magicLinkEnabled} />
+            <SignInForm
+              googleEnabled={googleEnabled}
+              magicLinkEnabled={magicLinkEnabled}
+              trialDays={TRIAL_DAYS}
+            />
           </div>
         </div>
 
